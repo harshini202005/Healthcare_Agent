@@ -33,7 +33,7 @@ An intelligent, agent-driven healthcare platform that leverages **Mistral AI** a
 ├── main.py               # FastAPI application entry point
 ├── seed_database.py      # Utility to populate initial doctor/schedule data
 └── requirements.txt      # Project dependencies
-'''
+ ```
 
 ## Setup Instructions
 1. Prerequisites
