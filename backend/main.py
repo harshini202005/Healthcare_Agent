@@ -557,3 +557,22 @@ def serve_frontend():
 
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR), name="frontend-assets")
+
+# ── Serve Frontend ────────────────────────────────────────────────────────
+
+FRONTEND_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "frontend"
+)
+
+@app.get("/")
+def serve_frontend():
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+# Serve all frontend files
+if os.path.isdir(FRONTEND_DIR):
+    app.mount(
+        "/static",
+        StaticFiles(directory=FRONTEND_DIR),
+        name="static"
+    )
