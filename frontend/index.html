@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Healthcare Assistant</title>
+<style>
+/* ── Reset & tokens ───────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --purple: #667eea;
+  --purple-dark: #764ba2;
+  --green: #2e7d32;
+  --orange: #e65100;
+  --blue: #1565c0;
+  --red: #c62828;
+  --gray: #6c757d;
+  --border: #dee2e6;
+  --bg: #f8f9fa;
+  --white: #fff;
+  --text: #212529;
+  --radius: 10px;
+  --shadow: 0 2px 12px rgba(0,0,0,.08);
+  --gradient: linear-gradient(135deg, var(--purple), var(--purple-dark));
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--gradient);
+  min-height: 100dvh;
+  color: var(--text);
+  font-size: 15px;
+}
+
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; font-size: 1em; }
+
+/* ── App shell ────────────────────────────────────────── */
+#app {
+  display: none;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: 1024px;
+  margin: 0 auto;
+  background: var(--white);
+}
+
+@media (min-width: 680px) {
+  body { padding: 16px; }
+  #app { height: calc(100dvh - 32px); border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.25); overflow: hidden; }
+}
+
+/* ── Header ───────────────────────────────────────────── */
+.header {
+  background: var(--gradient);
+  color: #fff;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.header h1 { font-size: clamp(1em, 4vw, 1.35em); white-space: nowrap; }
+.header p  { font-size: .75em; opacity: .85; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.bell-btn {
+  position: relative; background: rgba(255,255,255,.18); border: none;
+  border-radius: 50%; width: 38px; height: 38px; font-size: 1.1em;
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  transition: background .2s;
+}
+.bell-btn:hover { background: rgba(255,255,255,.32); }
+.bell-badge {
+  position: absolute; top: 1px; right: 1px;
+  background: #f44336; color: #fff; font-size: .58em; font-weight: 700;
+  min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--purple-dark);
+}
+.bell-badge[hidden] { display: none; }
+
+.user-pill { background: rgba(255,255,255,.2); border-radius: 20px; padding: 4px 12px; font-size: .8em; font-weight: 600; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logout-btn { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.4); color: #fff; border-radius: 8px; padding: 5px 10px; font-size: .78em; transition: background .2s; white-space: nowrap; }
+.logout-btn:hover { background: rgba(255,255,255,.28); }
+
+/* ── Tab bar ──────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  background: var(--bg);
+  border-bottom: 2px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+
+.tab-btn {
+  flex-shrink: 0;
+  padding: 11px 18px;
+  background: none; border: none;
+  border-bottom: 3px solid transparent;
+  font-size: .88em; font-weight: 600; color: var(--gray);
+  transition: all .2s; margin-bottom: -2px; white-space: nowrap;
+}
+.tab-btn.active { color: var(--purple); border-bottom-color: var(--purple); background: var(--white); }
+.tab-btn:hover:not(.active) { color: #495057; background: #f1f3f5; }
+
+/* ── Tab panels ───────────────────────────────────────── */
+.tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.tab-panel.active { display: flex; }
+
+/* ── Scroll containers ────────────────────────────────── */
+.scroll-panel { flex: 1; overflow-y: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
+
+/* ── Buttons (shared) ─────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 18px; border-radius: 8px; font-size: .88em; font-weight: 600;
+  border: none; transition: all .2s; white-space: nowrap;
+}
+.btn-primary { background: var(--gradient); color: #fff; }
+.btn-primary:hover { box-shadow: 0 4px 12px rgba(102,126,234,.4); }
+.btn-outline { background: #fff; border: 1.5px solid var(--border); color: #495057; }
+.btn-outline:hover { background: var(--bg); }
+.btn-danger  { background: #fff; border: 1.5px solid var(--red); color: var(--red); }
+.btn-danger:hover  { background: var(--red); color: #fff; }
+.btn:disabled { background: #adb5bd; border-color: #adb5bd; color: #fff; cursor: not-allowed; }
+
+/* ── Form fields ──────────────────────────────────────── */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: .83em; font-weight: 600; color: #495057; margin-bottom: 4px; }
+.field label .req { color: var(--red); margin-left: 2px; }
+.field label .opt { font-weight: 400; color: #adb5bd; font-size: .9em; margin-left: 3px; }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 10px 13px; border: 1.5px solid var(--border);
+  border-radius: 8px; color: var(--text); background: var(--white);
+  transition: border-color .2s, box-shadow .2s;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px rgba(102,126,234,.12);
+}
+.field textarea { resize: vertical; min-height: 68px; }
+.field select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236c757d' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px;
+}
+.field .hint { font-size: .77em; color: var(--gray); margin-top: 3px; }
+.field .err  { font-size: .77em; color: var(--red); margin-top: 3px; display: none; }
+.field .err.show { display: block; }
+.field input.invalid, .field select.invalid { border-color: var(--red); }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 440px) { .two-col { grid-template-columns: 1fr; } }
+
+/* ── Modals ───────────────────────────────────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.45); z-index: 500;
+  align-items: flex-end; justify-content: center; padding: 0;
+}
+.modal-overlay.open { display: flex; }
+.modal-card {
+  background: var(--white); width: 100%; max-height: 92dvh;
+  border-radius: 18px 18px 0 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  animation: slideUp .25s ease;
+}
+@keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+@media (min-width: 560px) {
+  .modal-overlay { align-items: center; padding: 20px; }
+  .modal-card { border-radius: 16px; max-width: 520px; max-height: 88dvh; animation: zoomIn .22s ease; }
+  .modal-card.wide { max-width: 600px; }
+  @keyframes zoomIn { from { transform: scale(.94) translateY(14px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+}
+
+.modal-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.modal-header h2 { font-size: 1.05em; }
+.modal-close { width: 28px; height: 28px; border: none; background: var(--bg); border-radius: 50%; font-size: .95em; color: var(--gray); display: flex; align-items: center; justify-content: center; transition: background .2s; }
+.modal-close:hover { background: var(--border); }
+.modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+.modal-footer { padding: 12px 20px 16px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0; }
+
+/* ── Toggle switch ────────────────────────────────────── */
+.toggle { position: relative; display: inline-block; width: 42px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-track { position: absolute; inset: 0; background: #ccc; border-radius: 22px; transition: .3s; cursor: pointer; }
+.toggle-track::before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .3s; }
+.toggle input:checked + .toggle-track { background: var(--purple); }
+.toggle input:checked + .toggle-track::before { transform: translateX(20px); }
+
+/* ── Badge ────────────────────────────────────────────── */
+.badge { padding: 2px 9px; border-radius: 12px; font-size: .75em; font-weight: 600; }
+.badge-purple { background: #f3f0ff; color: #5b21b6; }
+.badge-blue   { background: #e3f2fd; color: var(--blue); }
+.badge-green  { background: #e8f5e9; color: var(--green); }
+.badge-orange { background: #fff3e0; color: var(--orange); }
+.badge-gray   { background: var(--bg); color: var(--gray); border: 1px solid var(--border); }
+.badge-red    { background: #ffebee; color: var(--red); }
+
+/* ── Toast ────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  padding: 11px 22px; border-radius: 10px; font-size: .9em; font-weight: 600;
+  color: #fff; z-index: 9999; box-shadow: 0 4px 16px rgba(0,0,0,.22);
+  animation: slideUp .2s ease; pointer-events: none;
+}
+
+/* ══════════════════════════════════════════════════════
+   AUTH
+══════════════════════════════════════════════════════ */
+#auth-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: var(--gradient);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.auth-card {
+  background: var(--white); border-radius: 18px; padding: 28px 24px;
+  width: 100%; max-width: 400px; box-shadow: 0 24px 64px rgba(0,0,0,.3);
+  animation: zoomIn .25s ease;
+}
+@keyframes zoomIn { from { transform: scale(.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.auth-card h1 { font-size: 1.45em; margin-bottom: 2px; }
+.auth-card > p { color: var(--gray); font-size: .87em; margin-bottom: 20px; }
+.auth-tabs { display: flex; border: 1.5px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+.auth-tab { flex: 1; padding: 9px; background: var(--white); border: none; font-size: .88em; font-weight: 600; color: var(--gray); transition: all .2s; }
+.auth-tab.active { background: var(--gradient); color: #fff; }
+.auth-error { background: #ffebee; border: 1px solid #ef9a9a; color: var(--red); border-radius: 8px; padding: 9px 13px; font-size: .87em; margin-bottom: 12px; display: none; }
+.auth-error.show { display: block; }
+.auth-demo { margin-top: 14px; font-size: .78em; color: #9e9e9e; text-align: center; line-height: 1.6; }
+
+/* ══════════════════════════════════════════════════════
+   CHAT
+══════════════════════════════════════════════════════ */
+.toolbar { display: flex; gap: 8px; padding: 10px 16px; background: var(--bg); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; align-items: center; }
+.toolbar span { font-size: .8em; color: var(--gray); }
+.tool-btn { display: flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 20px; font-size: .82em; font-weight: 600; border: 2px solid transparent; transition: all .2s; }
+.tool-btn.booking { background: #e8f5e9; border-color: #43a047; color: var(--green); }
+.tool-btn.booking:hover { background: #43a047; color: #fff; }
+.tool-btn.diet { background: #fff3e0; border-color: #fb8c00; color: var(--orange); }
+.tool-btn.diet:hover { background: #fb8c00; color: #fff; }
+
+.chat-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 16px 12px; }
+.messages { flex: 1; overflow-y: auto; padding: 12px; background: var(--bg); border-radius: var(--radius); margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
+
+.msg { max-width: 80%; padding: 10px 14px; border-radius: 18px; word-break: break-word; animation: msgIn .2s ease; }
+@keyframes msgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.msg.user { align-self: flex-end; background: var(--gradient); color: #fff; border-bottom-right-radius: 4px; }
+.msg.bot  { align-self: flex-start; background: var(--white); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.msg.sys  { align-self: center; background: #e3f2fd; border: 1px solid #90caf9; color: #0d47a1; font-size: .82em; max-width: 90%; text-align: center; border-radius: 8px; }
+.msg-body { line-height: 1.55; }
+.msg-body strong { font-weight: 700; }
+.msg-body ul { padding-left: 18px; }
+.msg-body p  { margin-bottom: 4px; }
+.msg-time { font-size: .7em; opacity: .55; margin-top: 3px; }
+
+.thinking {
+  align-self: flex-start; background: #f3f0ff; border: 1px solid #d8cfff;
+  border-radius: 12px; padding: 7px 13px; font-size: .8em; color: #5b21b6;
+  display: flex; align-items: center; gap: 7px; animation: msgIn .2s ease;
+}
+.dot { width: 6px; height: 6px; background: #7c3aed; border-radius: 50%; animation: bounce 1.2s infinite; }
+.dot:nth-child(2) { animation-delay: .15s; }
+.dot:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-7px); } }
+
+.typing-ind { display: flex; gap: 4px; padding: 6px 10px; }
+.typing-dot { width: 7px; height: 7px; background: var(--purple); border-radius: 50%; animation: bounce 1.4s infinite; }
+.typing-dot:nth-child(2) { animation-delay: .2s; }
+.typing-dot:nth-child(3) { animation-delay: .4s; }
+
+.welcome { text-align: center; padding: 24px 16px; color: var(--gray); }
+.welcome h2 { color: #495057; margin-bottom: 8px; font-size: 1.15em; }
+.welcome .icon { font-size: 2.2em; margin-bottom: 8px; }
+.chips { display: flex; gap: 7px; margin-top: 16px; flex-wrap: wrap; justify-content: center; }
+.chip { background: var(--white); border: 1px solid var(--border); padding: 6px 12px; border-radius: 18px; font-size: .8em; cursor: pointer; transition: all .2s; }
+.chip:hover { background: var(--purple); color: #fff; border-color: var(--purple); }
+
+.input-row { display: flex; gap: 8px; align-items: flex-end; }
+#userInput {
+  flex: 1; padding: 11px 16px; border: 2px solid var(--border); border-radius: 22px;
+  font-size: .95em; resize: none; max-height: 100px; overflow-y: auto; transition: border-color .2s; line-height: 1.4;
+}
+#userInput:focus { outline: none; border-color: var(--purple); }
+.send-btn { background: var(--gradient); color: #fff; border: none; padding: 11px 20px; border-radius: 22px; font-size: .95em; font-weight: 600; transition: all .22s; white-space: nowrap; }
+.send-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 14px rgba(102,126,234,.4); }
+.send-btn:disabled { background: #adb5bd; cursor: not-allowed; transform: none; }
+
+/* ══════════════════════════════════════════════════════
+   WORKFLOWS
+══════════════════════════════════════════════════════ */
+.panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+.panel-header h2 { font-size: 1.1em; }
+
+.wf-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; transition: box-shadow .2s; }
+.wf-card:hover { box-shadow: var(--shadow); }
+.wf-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.wf-name { font-weight: 700; font-size: .98em; }
+.wf-desc { font-size: .82em; color: var(--gray); margin-top: 2px; }
+.wf-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.wf-btn { padding: 4px 11px; border-radius: 6px; font-size: .78em; font-weight: 600; border: 1.5px solid; transition: all .2s; }
+.wf-btn.edit   { border-color: var(--purple); color: var(--purple); background: #fff; }
+.wf-btn.edit:hover   { background: var(--purple); color: #fff; }
+.wf-btn.delete { border-color: var(--red); color: var(--red); background: #fff; }
+.wf-btn.delete:hover { background: var(--red); color: #fff; }
+.wf-btn.runs   { border-color: var(--gray); color: var(--gray); background: #fff; }
+.wf-btn.runs:hover   { background: var(--gray); color: #fff; }
+.wf-btn.test   { border-color: var(--green); color: var(--green); background: #fff; }
+.wf-btn.test:hover   { background: var(--green); color: #fff; }
+.wf-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+.empty { text-align: center; padding: 40px 20px; color: var(--gray); }
+.empty-icon { font-size: 2.8em; margin-bottom: 10px; }
+
+/* Dynamic form */
+.dyn-list { border: 1.5px solid var(--border); border-radius: 8px; padding: 10px; min-height: 40px; }
+.dyn-item { display: flex; gap: 7px; align-items: flex-start; margin-bottom: 8px; flex-wrap: wrap; }
+.dyn-item:last-child { margin-bottom: 0; }
+.dyn-item select, .dyn-item input { flex: 1; min-width: 80px; }
+.remove-btn { background: #ffebee; border: 1px solid #ef9a9a; color: var(--red); border-radius: 6px; padding: 6px 9px; font-size: .78em; white-space: nowrap; transition: all .2s; }
+.remove-btn:hover { background: var(--red); color: #fff; }
+.add-btn { margin-top: 8px; padding: 6px 12px; background: var(--bg); border: 1.5px dashed #adb5bd; border-radius: 6px; color: var(--gray); font-size: .82em; width: 100%; transition: all .2s; }
+.add-btn:hover { border-color: var(--purple); color: var(--purple); background: #f3f0ff; }
+
+/* Runs list */
+.run-item { display: flex; justify-content: space-between; align-items: center; padding: 9px 13px; border-radius: 8px; margin-bottom: 6px; background: var(--bg); border: 1px solid var(--border); font-size: .83em; gap: 8px; flex-wrap: wrap; }
+.run-badge { padding: 2px 9px; border-radius: 10px; font-size: .76em; font-weight: 600; white-space: nowrap; }
+.run-badge.completed { background: #e8f5e9; color: var(--green); }
+.run-badge.pending   { background: #fff8e1; color: #f57f17; }
+.run-badge.running   { background: #e3f2fd; color: var(--blue); }
+.run-badge.failed    { background: #ffebee; color: var(--red); }
+
+/* ══════════════════════════════════════════════════════
+   DOCTOR DASHBOARD
+══════════════════════════════════════════════════════ */
+.date-nav { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+.date-nav input { padding: 7px 11px; border: 1.5px solid var(--border); border-radius: 8px; font-size: .85em; max-width: 150px; }
+.date-nav input:focus { outline: none; border-color: var(--purple); }
+
+.summary-strip { display: flex; gap: 8px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.sc { flex-shrink: 0; padding: 10px 14px; border-radius: var(--radius); text-align: center; border: 1px solid; min-width: 90px; }
+.sc-num { font-size: 1.5em; font-weight: 800; }
+.sc-lbl { font-size: .72em; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.sc.scheduled    { background: var(--bg); border-color: var(--border); color: #495057; }
+.sc.waiting      { background: #fff8e1; border-color: #ffe082; color: #f57f17; }
+.sc.in_treatment { background: #e3f2fd; border-color: #90caf9; color: var(--blue); }
+.sc.completed    { background: #e8f5e9; border-color: #a5d6a7; color: var(--green); }
+.sc.no_show      { background: #ffebee; border-color: #ef9a9a; color: var(--red); }
+
+.patient-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 15px; margin-bottom: 9px; }
+.p-name { font-weight: 700; font-size: .96em; }
+.p-meta { font-size: .8em; color: var(--gray); margin-top: 2px; }
+.status-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.s-btn { padding: 5px 12px; border-radius: 18px; font-size: .78em; font-weight: 700; border: 2px solid; transition: all .2s; background: #fff; }
+.s-btn.active { color: #fff !important; }
+.s-btn.scheduled    { border-color: #9e9e9e; color: #757575; }  .s-btn.scheduled.active    { background: #757575; }
+.s-btn.waiting      { border-color: #ffa000; color: #f57f17; }  .s-btn.waiting.active      { background: #ffa000; }
+.s-btn.in_treatment { border-color: #1e88e5; color: var(--blue); }  .s-btn.in_treatment.active { background: #1e88e5; }
+.s-btn.completed    { border-color: #43a047; color: var(--green); } .s-btn.completed.active    { background: #43a047; }
+.s-btn.no_show      { border-color: #e53935; color: var(--red); }   .s-btn.no_show.active      { background: #e53935; }
+
+/* ══════════════════════════════════════════════════════
+   NOTIFICATIONS
+══════════════════════════════════════════════════════ */
+.notif-search { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.notif-search input { flex: 1; min-width: 140px; padding: 9px 13px; border: 1.5px solid var(--border); border-radius: 8px; }
+.notif-search input:focus { outline: none; border-color: var(--purple); }
+
+.notif-item { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; display: flex; gap: 10px; align-items: flex-start; transition: box-shadow .2s; }
+.notif-item:hover { box-shadow: var(--shadow); }
+.notif-item.unread { border-left: 4px solid var(--purple); background: #fafbff; }
+.notif-dot { width: 8px; height: 8px; background: var(--purple); border-radius: 50%; margin-top: 5px; flex-shrink: 0; display: none; }
+.notif-item.unread .notif-dot { display: block; }
+.notif-body { flex: 1; min-width: 0; }
+.notif-title { font-weight: 700; font-size: .93em; margin-bottom: 2px; }
+.notif-msg { font-size: .85em; color: #555; line-height: 1.4; }
+.notif-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; flex-wrap: wrap; gap: 5px; }
+.notif-time { font-size: .74em; color: #9e9e9e; }
+.mark-read-btn { padding: 3px 9px; background: #fff; border: 1px solid var(--border); color: var(--gray); border-radius: 6px; font-size: .75em; transition: all .2s; }
+.mark-read-btn:hover { background: var(--bg); }
+.notif-group-lbl { font-size: .78em; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: .5px; cursor: pointer; margin-bottom: 6px; padding: 4px 0; }
+.notif-group-lbl:hover { color: var(--purple); }
+
+/* ══════════════════════════════════════════════════════
+   ADMIN USERS
+══════════════════════════════════════════════════════ */
+.user-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; gap: 10px; flex-wrap: wrap; }
+.u-name { font-weight: 700; font-size: .93em; }
+.u-meta { font-size: .8em; color: var(--gray); margin-top: 2px; }
+.u-disabled { opacity: .5; }
+.role-pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: .75em; font-weight: 700; margin-left: 5px; }
+.role-admin   { background: #fff3e0; color: var(--orange); }
+.role-doctor  { background: #e8f5e9; color: var(--green); }
+.role-patient { background: #e3f2fd; color: var(--blue); }
+
+/* ══════════════════════════════════════════════════════
+   AUTH OVERLAY (login/signup)
+══════════════════════════════════════════════════════ */
+.allergy-tags { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 9px; border: 1.5px solid var(--border); border-radius: 8px; min-height: 40px; cursor: text; transition: border-color .2s; }
+.allergy-tags:focus-within { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(102,126,234,.12); }
+.allergy-tags .tag { display: inline-flex; align-items: center; gap: 3px; background: #fff3e0; border: 1px solid #ffb74d; color: var(--orange); padding: 2px 9px; border-radius: 12px; font-size: .78em; font-weight: 500; }
+.allergy-tags .tag button { background: none; border: none; color: var(--orange); font-size: 1em; padding: 0 1px; line-height: 1; cursor: pointer; }
+.allergy-tags input { border: none !important; outline: none !important; box-shadow: none !important; padding: 2px 3px !important; font-size: .85em; min-width: 90px; flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ══ AUTH OVERLAY ══ -->
+<div id="auth-overlay">
+  <div class="auth-card">
+    <h1>🏥 Healthcare</h1>
+    <p>Sign in or create an account to continue.</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')"  id="at-login">Sign In</button>
+      <button class="auth-tab"        onclick="switchAuthTab('signup')" id="at-signup">Sign Up</button>
+    </div>
+    <div id="auth-error" class="auth-error"></div>
+
+    <!-- Login -->
+    <div id="login-form">
+      <div class="field"><label>Username</label><input id="l-user" type="text" placeholder="e.g. admin" autocomplete="username"/></div>
+      <div class="field"><label>Password</label><input id="l-pass" type="password" placeholder="••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()"/></div>
+      <button class="btn btn-primary" style="width:100%;padding:11px;" id="login-btn" onclick="doLogin()">Sign In</button>
+      <div class="auth-demo">Demo accounts:<br>admin / admin123 &nbsp;·&nbsp; doctor_sarah / doctor123 &nbsp;·&nbsp; patient_test / patient123</div>
+    </div>
+
+    <!-- Signup -->
+    <div id="signup-form" style="display:none">
+      <div class="field"><label>Username</label><input id="s-user" type="text" placeholder="Choose a username" autocomplete="username"/></div>
+      <div class="field"><label>Email</label><input id="s-email" type="email" placeholder="your@email.com"/></div>
+      <div class="field"><label>Password</label><input id="s-pass" type="password" placeholder="Min. 6 characters" autocomplete="new-password"/></div>
+      <div class="field">
+        <label>Role</label>
+        <select id="s-role" onchange="onRoleChange()">
+          <option value="patient">Patient</option>
+          <option value="doctor">Doctor</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="field" id="s-patient-row" style="display:none"><label>Your Patient ID <span class="opt">(e.g. PAT001)</span></label><input id="s-linked" type="text" placeholder="e.g. PAT001"/></div>
+      <div class="field" id="s-doctor-row" style="display:none"><label>Link to Doctor Profile</label><select id="s-doctor"><option value="">Loading…</option></select></div>
+      <button class="btn btn-primary" style="width:100%;padding:11px;" id="signup-btn" onclick="doSignup()">Create Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ══ -->
+<div id="app">
+  <header class="header">
+    <div>
+      <h1>🏥 Healthcare</h1>
+      <p id="header-sub">AI-Powered Health Management</p>
+    </div>
+    <div class="header-right">
+      <button class="bell-btn" onclick="switchTab('notifications')" title="Notifications">
+        🔔<span class="bell-badge" id="bell-badge" hidden></span>
+      </button>
+      <span class="user-pill" id="user-pill"></span>
+      <button class="logout-btn" onclick="doLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <nav class="tab-bar">
+    <button class="tab-btn active" id="tb-chat"        onclick="switchTab('chat')">💬 Chat</button>
+    <button class="tab-btn"        id="tb-doctor"      onclick="switchTab('doctor')"      style="display:none">🩺 Patients</button>
+    <button class="tab-btn"        id="tb-workflows"   onclick="switchTab('workflows')"   style="display:none">⚙️ Workflows</button>
+    <button class="tab-btn"        id="tb-admin-users" onclick="switchTab('admin-users')" style="display:none">👥 Users</button>
+    <button class="tab-btn"        id="tb-notifications" onclick="switchTab('notifications')">🔔 Notifications</button>
+  </nav>
+
+  <!-- CHAT -->
+  <div class="tab-panel active" id="tab-chat">
+    <div class="toolbar">
+      <span>Quick:</span>
+      <button class="tool-btn booking" onclick="openModal('booking-modal')">📅 Book</button>
+      <button class="tool-btn diet"    onclick="openModal('diet-modal')">🥗 Diet Plan</button>
+    </div>
+    <div class="chat-wrap">
+      <div class="messages" id="messages">
+        <div class="welcome" id="welcome">
+          <div class="icon">🏥</div>
+          <h2>Hello! I'm your Healthcare Assistant</h2>
+          <p>Powered by AI — ask me anything about your health.</p>
+          <div class="chips">
+            <span class="chip" onclick="fillExample('I have chest pain, which doctor should I see?')">❤️ Symptom check</span>
+            <span class="chip" onclick="fillExample('Find a cardiologist and book for tomorrow 10 AM')">📅 Book appointment</span>
+            <span class="chip" onclick="fillExample('What are the symptoms of diabetes?')">🩺 Health Q&A</span>
+            <span class="chip" onclick="fillExample('Generate a vegetarian diet plan for 1800 calories')">🥗 Diet plan</span>
+          </div>
+        </div>
+      </div>
+      <div class="input-row">
+        <textarea id="userInput" placeholder="Ask about doctors, symptoms, appointments…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOCTOR PATIENTS -->
+  <div class="tab-panel" id="tab-doctor">
+    <div class="scroll-panel">
+      <div class="panel-header">
+        <h2>🩺 Patient Queue</h2>
+        <div class="date-nav">
+          <button class="btn btn-outline" style="padding:6px 10px;" onclick="shiftDate(-1)">◀</button>
+          <input type="date" id="doc-date" onchange="loadDoctorPatients()"/>
+          <button class="btn btn-outline" style="padding:6px 10px;" onclick="shiftDate(1)">▶</button>
+          <button class="btn btn-primary" style="padding:6px 12px;font-size:.82em;" onclick="loadDoctorPatients()">↺</button>
+        </div>
+      </div>
+      <div class="summary-strip" id="doc-summary"></div>
+      <div id="doc-list"><div class="empty"><div class="empty-icon">🩺</div><p>Loading…</p></div></div>
+    </div>
+  </div>
+
+  <!-- WORKFLOWS -->
+  <div class="tab-panel" id="tab-workflows">
+    <div class="scroll-panel">
+      <div class="panel-header">
+        <h2>⚙️ Workflows</h2>
+        <button class="btn btn-primary" onclick="openWorkflowModal()">+ New</button>
+      </div>
+      <div id="wf-list"><div class="empty"><div class="empty-icon">⚙️</div><p>Loading workflows…</p></div></div>
+    </div>
+  </div>
+
+  <!-- ADMIN USERS -->
+  <div class="tab-panel" id="tab-admin-users">
+    <div class="scroll-panel">
+      <div class="panel-header"><h2>👥 Users</h2></div>
+      <div id="users-list"><div class="empty"><div class="empty-icon">👥</div><p>Loading…</p></div></div>
+    </div>
+  </div>
+
+  <!-- NOTIFICATIONS -->
+  <div class="tab-panel" id="tab-notifications">
+    <div class="scroll-panel">
+      <div class="notif-search">
+        <input id="notif-input" type="text" placeholder="Patient ID or doctor:doc_001" onkeydown="if(event.key==='Enter') loadNotifications()"/>
+        <button class="btn btn-primary" onclick="loadNotifications()">Load</button>
+        <button class="btn btn-outline" onclick="loadRecentNotifications()">Recent</button>
+      </div>
+      <div id="notif-content">
+        <div class="empty"><div class="empty-icon">🔔</div><p>Enter an ID or click <strong>Recent</strong> to see all notifications.</p></div>
+      </div>
+    </div>
+  </div>
+</div><!-- /#app -->
+
+<!-- ══ BOOKING MODAL ══ -->
+<div class="modal-overlay" id="booking-modal">
+  <div class="modal-card">
+    <div class="modal-header"><h2>📅 Book Appointment</h2><button class="modal-close" onclick="closeModal('booking-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Patient ID <span class="req">*</span></label><input id="b-pid" type="text" placeholder="e.g. PAT001"/><div class="err" id="b-pid-err">Required.</div></div>
+      <div class="two-col">
+        <div class="field"><label>Date <span class="req">*</span></label><input id="b-date" type="date"/><div class="err" id="b-date-err">Required.</div></div>
+        <div class="field"><label>Time <span class="req">*</span></label><select id="b-time"><option value="">-- Select --</option></select><div class="err" id="b-time-err">Required.</div></div>
+      </div>
+      <div class="field"><label>Specialty</label>
+        <select id="b-spec">
+          <option value="general-practice">General Practice</option>
+          <option value="cardiology">Cardiology</option>
+          <option value="dermatology">Dermatology</option>
+          <option value="neurology">Neurology</option>
+          <option value="orthopedics">Orthopedics</option>
+          <option value="pediatrics">Pediatrics</option>
+        </select>
+      </div>
+      <div class="field"><label>Reason <span class="opt">(optional)</span></label><textarea id="b-reason" placeholder="e.g. Annual checkup"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('booking-modal')">Cancel</button>
+      <button class="btn btn-primary" style="background:linear-gradient(135deg,#43a047,#2e7d32)" onclick="submitBooking()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DIET MODAL ══ -->
+<div class="modal-overlay" id="diet-modal">
+  <div class="modal-card">
+    <div class="modal-header"><h2>🥗 Diet Plan</h2><button class="modal-close" onclick="closeModal('diet-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Dietary Preference <span class="req">*</span></label>
+        <select id="d-pref">
+          <option value="balanced">Balanced</option><option value="vegetarian">Vegetarian</option>
+          <option value="vegan">Vegan</option><option value="keto">Keto</option>
+          <option value="low-carb">Low-Carb</option><option value="high-protein">High-Protein</option>
+          <option value="diabetic-friendly">Diabetic-Friendly</option><option value="gluten-free">Gluten-Free</option>
+        </select>
+      </div>
+      <div class="field"><label>Daily Calories <span class="opt">(optional)</span></label><input id="d-cal" type="number" placeholder="e.g. 2000" min="500" max="5000" step="50"/><div class="hint">Default: 2000 kcal</div><div class="err" id="d-cal-err">Must be 500–5000.</div></div>
+      <div class="field">
+        <label>Allergies <span class="opt">(optional)</span></label>
+        <div class="allergy-tags" id="allergy-box" onclick="document.getElementById('allergy-inp').focus()">
+          <input id="allergy-inp" type="text" placeholder="Type and press Enter…"/>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('diet-modal')">Cancel</button>
+      <button class="btn btn-primary" style="background:linear-gradient(135deg,#fb8c00,#e65100)" onclick="submitDiet()">Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ WORKFLOW MODAL ══ -->
+<div class="modal-overlay" id="wf-modal">
+  <div class="modal-card wide">
+    <div class="modal-header"><h2 id="wf-modal-title">⚙️ New Workflow</h2><button class="modal-close" onclick="closeModal('wf-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="wf-id"/>
+      <div class="field"><label>Name <span class="req">*</span></label><input id="wf-name" type="text" placeholder="e.g. Post-Visit Follow-Up"/></div>
+      <div class="field"><label>Description <span class="opt">(optional)</span></label><input id="wf-desc" type="text" placeholder="What does this do?"/></div>
+      <div class="field"><label>Trigger Event <span class="req">*</span></label>
+        <select id="wf-trigger">
+          <option value="appointment_booked">Appointment Booked</option>
+          <option value="appointment_completed">Appointment Completed</option>
+          <option value="appointment_cancelled">Appointment Cancelled</option>
+          <option value="patient_no_show">Patient No-Show</option>
+          <option value="new_patient">New Patient Registered</option>
+        </select>
+      </div>
+      <div class="field"><label>Delay (hours after trigger)</label><input id="wf-delay" type="number" placeholder="0" min="0" max="720" value="0"/><div class="hint">0 = immediate. 168 = 7 days.</div></div>
+      <div class="field"><label>Conditions <span class="opt">(all must match)</span></label><div class="dyn-list" id="wf-conds"></div><button type="button" class="add-btn" onclick="addCondition()">+ Add Condition</button></div>
+      <div class="field"><label>Actions <span class="req">*</span></label><div class="dyn-list" id="wf-acts"></div><button type="button" class="add-btn" onclick="addAction()">+ Add Action</button></div>
+      <div class="two-col" style="margin-top:10px;">
+        <div class="field" style="margin:0"><label>Active</label><label class="toggle"><input type="checkbox" id="wf-active" checked><span class="toggle-track"></span></label></div>
+        <div class="field" style="margin:0"><label>Agentic (AI decides)</label><label class="toggle"><input type="checkbox" id="wf-agentic"><span class="toggle-track"></span></label></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('wf-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWorkflow()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RUNS MODAL ══ -->
+<div class="modal-overlay" id="runs-modal">
+  <div class="modal-card wide">
+    <div class="modal-header"><h2 id="runs-title">Run History</h2><button class="modal-close" onclick="closeModal('runs-modal')">✕</button></div>
+    <div class="modal-body"><div id="runs-list"></div></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ── State ──────────────────────────────────────────────────────────────────
+const API = '';
+let _user = null, _token = null;
+let _allergyList = [], _wfCache = {};
+let _notifId = '', _notifTimer = null;
+let _thinkIds = [], _processing = false;
+
+// ── Auth storage ───────────────────────────────────────────────────────────
+const authH = () => _token ? {'Content-Type':'application/json','Authorization':`Bearer ${_token}`} : {'Content-Type':'application/json'};
+const saveAuth = (tok, u) => { _token = tok; _user = u; localStorage.setItem('hc_tok', tok); localStorage.setItem('hc_u', JSON.stringify(u)); };
+const clearAuth = () => { _token = null; _user = null; localStorage.removeItem('hc_tok'); localStorage.removeItem('hc_u'); };
+function loadAuth() {
+  const tok = localStorage.getItem('hc_tok'), u = localStorage.getItem('hc_u');
+  if (tok && u) { try { _token = tok; _user = JSON.parse(u); return true; } catch(_) {} }
+  return false;
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const $ = id => document.getElementById(id);
+const fmtTime = (h, m) => `${h>12?h-12:h||12}:${String(m).padStart(2,'0')} ${h<12?'AM':'PM'}`;
+
+function showToast(msg, type='success') {
+  const colors = {success:'#2e7d32', error:'#c62828', warning:'#f57f17'};
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.background = colors[type] || '#333';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ── Modal helpers ──────────────────────────────────────────────────────────
+function openModal(id)  { $(id).classList.add('open'); }
+function closeModal(id) { $(id).classList.remove('open'); }
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) closeModal(e.target.id);
+});
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const btn = $(`tb-${name}`); if (btn) btn.classList.add('active');
+  const panel = $(`tab-${name}`); if (panel) panel.classList.add('active');
+  if (name === 'workflows')   loadWorkflows();
+  if (name === 'doctor')      { $('doc-date').value || ($('doc-date').value = today()); loadDoctorPatients(); }
+  if (name === 'admin-users') loadAdminUsers();
+  if (name === 'notifications') { startNotifPoll(); if (_notifId) loadNotifications(_notifId); }
+  else stopNotifPoll();
+}
+
+const today = () => new Date().toISOString().split('T')[0];
+
+// ── Auth UI ────────────────────────────────────────────────────────────────
+function switchAuthTab(tab) {
+  $('login-form').style.display  = tab === 'login'  ? '' : 'none';
+  $('signup-form').style.display = tab === 'signup' ? '' : 'none';
+  $('at-login').classList.toggle('active',  tab === 'login');
+  $('at-signup').classList.toggle('active', tab === 'signup');
+  $('auth-error').classList.remove('show');
+}
+
+function showAuthErr(msg) { const e = $('auth-error'); e.textContent = msg; e.classList.add('show'); }
+
+async function onRoleChange() {
+  const r = $('s-role').value;
+  $('s-patient-row').style.display = r === 'patient' ? '' : 'none';
+  $('s-doctor-row').style.display  = r === 'doctor'  ? '' : 'none';
+  if (r === 'doctor') {
+    const res = await fetch(`${API}/api/auth/doctors-list`).then(r => r.json()).catch(() => ({doctors:[]}));
+    $('s-doctor').innerHTML = '<option value="">-- Select profile --</option>' +
+      (res.doctors||[]).map(d => `<option value="${d.id}">${esc(d.name)} (${esc(d.specialty)})</option>`).join('');
+  }
+}
+
+async function doLogin() {
+  const btn = $('login-btn'); btn.disabled = true; btn.textContent = 'Signing in…';
+  $('auth-error').classList.remove('show');
+  try {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username: $('l-user').value.trim(), password: $('l-pass').value}),
+    });
+    const d = await res.json();
+    if (!res.ok) { showAuthErr(d.detail || 'Login failed'); return; }
+    saveAuth(d.token, d.user); enterApp();
+  } catch(e) { showAuthErr('Network error: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Sign In'; }
+}
+
+async function doSignup() {
+  const btn = $('signup-btn'); btn.disabled = true; btn.textContent = 'Creating…';
+  $('auth-error').classList.remove('show');
+  const role = $('s-role').value;
+  const linked_id = role === 'patient' ? $('s-linked').value.trim() : role === 'doctor' ? $('s-doctor').value : '';
+  try {
+    const res = await fetch(`${API}/api/auth/signup`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username: $('s-user').value.trim(), email: $('s-email').value.trim(), password: $('s-pass').value, role, linked_id}),
+    });
+    const d = await res.json();
+    if (!res.ok) { showAuthErr(d.detail || 'Signup failed'); return; }
+    saveAuth(d.token, d.user); enterApp();
+  } catch(e) { showAuthErr('Network error: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Create Account'; }
+}
+
+function doLogout() {
+  clearAuth(); stopNotifPoll();
+  $('app').style.display = 'none';
+  $('auth-overlay').style.display = 'flex';
+  $('l-user').value = ''; $('l-pass').value = '';
+}
+
+function enterApp() {
+  $('auth-overlay').style.display = 'none';
+  $('app').style.display = 'flex';
+  const u = _user;
+  const roleMap = {admin:'Admin', doctor:'Doctor', patient:'Patient'};
+  $('user-pill').textContent = `${roleMap[u.role]}: ${u.username}`;
+  $('header-sub').textContent = u.role === 'admin' ? 'Admin Dashboard' :
+    u.role === 'doctor' ? `Dr. ${u.linked_id || u.username}` : `Welcome, ${u.username}`;
+  $('tb-doctor').style.display      = ['doctor','admin'].includes(u.role) ? '' : 'none';
+  $('tb-workflows').style.display   = u.role === 'admin' ? '' : 'none';
+  $('tb-admin-users').style.display = u.role === 'admin' ? '' : 'none';
+  if (u.role === 'patient' && u.linked_id) { _notifId = u.linked_id; $('notif-input').value = u.linked_id; }
+  switchTab(u.role === 'doctor' ? 'doctor' : u.role === 'admin' ? 'workflows' : 'chat');
+}
+
+const getSessionId = () => _user ? `user_${_user.id}` : (sessionStorage.getItem('hc_sid') || (() => { const s = 'sess_'+Math.random().toString(36).slice(2,11); sessionStorage.setItem('hc_sid',s); return s; })());
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+function fillExample(t) { $('userInput').value = t; $('userInput').focus(); }
+
+function renderMarkdown(text) {
+  return '<p>' + esc(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^#{1,3} (.+)$/gm, '<strong>$1</strong>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]+?<\/li>)/g, '<ul>$1</ul>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>') + '</p>';
+}
+
+function addMsg(content, type) {
+  $('welcome')?.classList.add('hidden');
+  const area = $('messages');
+  const div = document.createElement('div');
+  div.className = `msg ${type}`;
+  const body = document.createElement('div');
+  body.className = 'msg-body';
+  type === 'user' ? (body.textContent = content) : (body.innerHTML = content);
+  div.appendChild(body);
+  if (type !== 'sys') {
+    const t = document.createElement('div');
+    t.className = 'msg-time';
+    t.textContent = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    div.appendChild(t);
+  }
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function showTyping() {
+  const area = $('messages');
+  const div = document.createElement('div');
+  div.className = 'msg bot'; div.id = 'typing-' + Date.now();
+  div.innerHTML = '<div class="typing-ind"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+  area.appendChild(div); area.scrollTop = area.scrollHeight;
+  return div.id;
+}
+const removeTyping = id => { const el = $(id); if (el) el.remove(); };
+
+function showThinking(tool, label) {
+  const area = $('messages');
+  const div = document.createElement('div');
+  div.className = 'thinking'; div.id = 'th-' + Date.now();
+  div.innerHTML = `<div class="dot"></div><div class="dot"></div><div class="dot"></div><span>${esc(label)}…</span>`;
+  area.appendChild(div); area.scrollTop = area.scrollHeight;
+  _thinkIds.push(div.id);
+}
+function clearThinking() { _thinkIds.forEach(id => { const el = $(id); if (el) el.remove(); }); _thinkIds = []; }
+
+async function sendMessage() {
+  const inp = $('userInput');
+  const msg = inp.value.trim();
+  if (!msg || _processing) return;
+  $('welcome')?.classList.add('hidden');
+  addMsg(msg, 'user');
+  inp.value = ''; inp.style.height = 'auto';
+  _processing = true; $('send-btn').disabled = true; _thinkIds = [];
+  try {
+    const resp = await fetch(`${API}/api/chat`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({message: msg, session_id: getSessionId()}),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const evt = JSON.parse(line.slice(6));
+          if (evt.type === 'tool_use') showThinking(evt.tool, evt.label || evt.tool);
+          else if (evt.type === 'final') { clearThinking(); addMsg(renderMarkdown(evt.content), 'bot'); }
+          else if (evt.type === 'error') { clearThinking(); addMsg(`⚠️ ${esc(evt.message)}`, 'bot'); }
+        } catch(_) {}
+      }
+    }
+  } catch(e) { clearThinking(); addMsg(`❌ ${esc(e.message)}`, 'bot'); }
+  finally { _processing = false; $('send-btn').disabled = false; }
+}
+
+$('userInput').addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 100) + 'px'; });
+
+// ── Booking modal ──────────────────────────────────────────────────────────
+(function initBooking() {
+  const sel = $('b-time');
+  for (let h = 8; h <= 17; h++) for (let m = 0; m < 60; m += 15) {
+    if (h === 17 && m > 45) break;
+    const o = document.createElement('option');
+    o.value = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    o.textContent = fmtTime(h, m);
+    sel.appendChild(o);
+  }
+  $('b-date').min = today();
+})();
+
+function openModal(id) {
+  if (id === 'booking-modal' && _user?.role === 'patient' && _user?.linked_id) $('b-pid').value = _user.linked_id;
+  if (id === 'diet-modal') { _allergyList = []; renderTags(); $('d-pref').selectedIndex = 0; $('d-cal').value = ''; }
+  document.getElementById(id).classList.add('open');
+}
+
+async function submitBooking() {
+  const pid = $('b-pid').value.trim(), date = $('b-date').value, time = $('b-time').value;
+  let ok = true;
+  [['b-pid', pid, 'b-pid-err'], ['b-date', date, 'b-date-err'], ['b-time', time, 'b-time-err']].forEach(([fid, val, eid]) => {
+    $(fid).classList.toggle('invalid', !val); $(eid).classList.toggle('show', !val); if (!val) ok = false;
+  });
+  if (!ok) return;
+  closeModal('booking-modal');
+  addMsg(`📅 Booking — ${esc(pid)} | ${$('b-spec').value} | ${date} at ${fmtTime(...$('b-time').value.split(':').map(Number))}`, 'user');
+  const tid = showTyping(); _processing = true; $('send-btn').disabled = true;
+  try {
+    const res = await fetch(`${API}/mcp/call`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:'book_appointment', args:{user_id:pid, date, time, specialty:$('b-spec').value, reason:$('b-reason').value.trim()||undefined}})});
+    const d = await res.json(); removeTyping(tid);
+    if (d.error) addMsg(`<div style="padding:12px;background:#fee;border-left:4px solid #d32f2f;border-radius:8px;"><strong style="color:#c62828">❌ Error</strong><div style="margin-top:6px">${esc(d.message||'Booking failed')}</div></div>`, 'bot');
+    else {
+      if (!d.error && _user?.role === 'patient') { _notifId = pid; $('notif-input').value = pid; }
+      addMsg(`<div style="padding:12px;background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border-left:4px solid #43a047;border-radius:8px;"><strong style="color:#2e7d32">✅ Confirmed: ${esc(d.confirmation_number)}</strong><div style="margin-top:6px;font-size:.9em">${esc(d.message||'')}</div></div>`, 'bot');
+    }
+  } catch(e) { removeTyping(tid); addMsg(`❌ Network error: ${esc(e.message)}`, 'bot'); }
+  finally { _processing = false; $('send-btn').disabled = false; }
+}
+
+// ── Diet modal ─────────────────────────────────────────────────────────────
+$('allergy-inp').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(this.value.trim()); this.value = ''; }
+  else if (e.key === 'Backspace' && !this.value && _allergyList.length) removeTag(_allergyList[_allergyList.length-1]);
+});
+function addTag(v) { const c = v.replace(/,/g,'').trim().toLowerCase(); if (!c || _allergyList.includes(c)) return; _allergyList.push(c); renderTags(); }
+function removeTag(t) { _allergyList = _allergyList.filter(x => x !== t); renderTags(); }
+function renderTags() {
+  const box = $('allergy-box'), inp = $('allergy-inp');
+  box.querySelectorAll('.tag').forEach(el => el.remove());
+  _allergyList.forEach(t => {
+    const s = document.createElement('span'); s.className = 'tag';
+    s.innerHTML = `${esc(t)} <button type="button" onclick="removeTag('${esc(t)}')">×</button>`;
+    box.insertBefore(s, inp);
+  });
+}
+
+async function submitDiet() {
+  const pref = $('d-pref').value, calRaw = $('d-cal').value.trim(), cal = calRaw ? parseInt(calRaw) : null;
+  if (calRaw && (!cal || cal < 500 || cal > 5000)) { $('d-cal').classList.add('invalid'); $('d-cal-err').classList.add('show'); return; }
+  $('d-cal').classList.remove('invalid'); $('d-cal-err').classList.remove('show');
+  closeModal('diet-modal');
+  addMsg(`🥗 Diet — ${pref}${cal ? ` | ${cal} kcal` : ''}${_allergyList.length ? ` | No: ${_allergyList.join(', ')}` : ''}`, 'user');
+  const tid = showTyping(); _processing = true; $('send-btn').disabled = true;
+  const args = {preferences: pref};
+  if (cal) args.calories = cal;
+  if (_allergyList.length) args.allergies = [..._allergyList];
+  try {
+    const res = await fetch(`${API}/mcp/call`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:'generate_diet', args})});
+    const d = await res.json(); removeTyping(tid);
+    if (d.error) addMsg(`❌ ${esc(d.message||'Diet generation failed')}`, 'bot');
+    else if (d.plan) addMsg(`<div style="padding:12px;background:linear-gradient(135deg,#fff8e1,#fff3e0);border-left:4px solid #fb8c00;border-radius:8px;"><strong style="color:#e65100">🥗 Your Diet Plan</strong><div style="margin-top:8px;font-size:.88em;white-space:pre-wrap">${esc(d.plan)}</div></div>`, 'bot');
+    else addMsg(renderMarkdown(JSON.stringify(d)), 'bot');
+  } catch(e) { removeTyping(tid); addMsg(`❌ ${esc(e.message)}`, 'bot'); }
+  finally { _processing = false; $('send-btn').disabled = false; _allergyList = []; }
+}
+
+// ── Doctor dashboard ───────────────────────────────────────────────────────
+function shiftDate(d) { const dp = $('doc-date'); const dt = new Date(dp.value||today()); dt.setDate(dt.getDate()+d); dp.value = dt.toISOString().split('T')[0]; loadDoctorPatients(); }
+
+async function loadDoctorPatients() {
+  const date = $('doc-date').value || today();
+  $('doc-list').innerHTML = '<div class="empty"><p style="color:var(--gray)">Loading…</p></div>';
+  try {
+    const res = await fetch(`${API}/api/doctor/patients?date=${date}`, {headers: authH()});
+    const data = await res.json();
+    const appts = data.appointments || [], sum = data.summary || {};
+    const SUMS = [['scheduled','📋 Scheduled'],['waiting','⏳ Waiting'],['in_treatment','💊 In Treatment'],['completed','✅ Done'],['no_show','❌ No-show']];
+    $('doc-summary').innerHTML = SUMS.map(([k,l]) => `<div class="sc ${k}"><div class="sc-num">${sum[k]||0}</div><div class="sc-lbl">${l}</div></div>`).join('');
+    if (!appts.length) { $('doc-list').innerHTML = `<div class="empty"><div class="empty-icon">🩺</div><p>No appointments for ${date}.</p></div>`; return; }
+    const STATUSES = ['scheduled','waiting','in_treatment','completed','no_show'];
+    const SLABELS = {scheduled:'Scheduled',waiting:'Waiting',in_treatment:'In Treatment',completed:'Done',no_show:'No-show'};
+    $('doc-list').innerHTML = appts.map(a => {
+      const st = a.treatment_status || 'scheduled';
+      return `<div class="patient-card" id="pc-${a.confirmation_number}">
+        <div class="p-name">👤 ${esc(a.patient_id)}</div>
+        <div class="p-meta">⏰ ${esc(a.appointment_time||'')} &nbsp;·&nbsp; ${esc(a.specialty||'general')} &nbsp;·&nbsp; <code>${esc(a.confirmation_number)}</code></div>
+        ${a.reason ? `<div class="p-meta" style="margin-top:2px">📝 ${esc(a.reason)}</div>` : ''}
+        <div class="status-row">${STATUSES.map(s => `<button class="s-btn ${s}${st===s?' active':''}" onclick="updateStatus('${a.confirmation_number}','${s}',this)">${SLABELS[s]}</button>`).join('')}</div>
+      </div>`;
+    }).join('');
+  } catch(e) { $('doc-list').innerHTML = `<div class="empty"><p style="color:var(--red)">⚠️ ${esc(e.message)}</p></div>`; }
+}
+
+async function updateStatus(conf, status, btn) {
+  try {
+    const res = await fetch(`${API}/api/appointments/${conf}/treatment-status`, {method:'PUT', headers: authH(), body: JSON.stringify({treatment_status: status})});
+    if (!res.ok) { const d = await res.json(); showToast(`❌ ${d.detail||'Update failed'}`, 'error'); return; }
+    const card = $(`pc-${conf}`);
+    if (card) { card.querySelectorAll('.s-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
+    const labels = {scheduled:'Scheduled',waiting:'Waiting',in_treatment:'In Treatment',completed:'Done',no_show:'No-show'};
+    showToast(`✅ → ${labels[status]}`);
+    loadDoctorPatients();
+  } catch(e) { showToast(`❌ ${e.message}`, 'error'); }
+}
+
+// ── Admin users ────────────────────────────────────────────────────────────
+async function loadAdminUsers() {
+  $('users-list').innerHTML = '<div class="empty"><p style="color:var(--gray)">Loading…</p></div>';
+  try {
+    const d = await fetch(`${API}/api/admin/users`, {headers: authH()}).then(r => r.json());
+    const users = d.users || [];
+    if (!users.length) { $('users-list').innerHTML = '<div class="empty"><div class="empty-icon">👥</div><p>No users.</p></div>'; return; }
+    $('users-list').innerHTML = users.map(u => `
+      <div class="user-row ${u.is_active?'':'u-disabled'}">
+        <div>
+          <div class="u-name">${esc(u.username)}<span class="role-pill role-${u.role}">${u.role}</span>${!u.is_active?'<span style="font-size:.75em;color:var(--red);margin-left:5px">Disabled</span>':''}</div>
+          <div class="u-meta">${esc(u.email)}${u.linked_id?` · <code>${esc(u.linked_id)}</code>`:''}</div>
+        </div>
+        <button onclick="toggleUser('${u.id}',${u.is_active})" class="btn ${u.is_active?'btn-danger':'btn-outline'}" style="padding:5px 12px;font-size:.8em;">${u.is_active?'Disable':'Enable'}</button>
+      </div>`).join('');
+  } catch(e) { $('users-list').innerHTML = `<div class="empty"><p style="color:var(--red)">⚠️ ${esc(e.message)}</p></div>`; }
+}
+
+async function toggleUser(id, active) {
+  try {
+    const d = await fetch(`${API}/api/admin/users/${id}/toggle`, {method:'PUT', headers: authH()}).then(r => r.json());
+    showToast(d.is_active ? '✅ Enabled' : '⚠️ Disabled', d.is_active ? 'success' : 'warning');
+    loadAdminUsers();
+  } catch(e) { showToast(`❌ ${e.message}`, 'error'); }
+}
+
+// ── Workflows ──────────────────────────────────────────────────────────────
+const TRIGGER_LABELS = {appointment_booked:'Appointment Booked',appointment_completed:'Appointment Completed',appointment_cancelled:'Appointment Cancelled',patient_no_show:'Patient No-Show',new_patient:'New Patient',scheduled:'Scheduled'};
+const ACTION_TYPES = [{value:'send_notification',label:'Notify Patient'},{value:'notify_doctor',label:'Alert Doctor'},{value:'auto_book_followup',label:'Auto Book Follow-Up'},{value:'run_agent',label:'Run AI Agent'}];
+const COND_FIELDS = ['specialty','patient_id','doctor_id','reason','date'];
+const COND_OPS    = ['equals','not_equals','contains','not_contains'];
+
+async function loadWorkflows() {
+  try {
+    const d = await fetch(`${API}/api/workflows`).then(r => r.json());
+    renderWorkflows(d.workflows || []);
+  } catch(e) { $('wf-list').innerHTML = `<div class="empty"><p>⚠️ ${esc(e.message)}</p></div>`; }
+}
+
+function renderWorkflows(wfs) {
+  _wfCache = {}; wfs.forEach(w => _wfCache[w.id] = w);
+  if (!wfs.length) { $('wf-list').innerHTML = '<div class="empty"><div class="empty-icon">⚙️</div><p>No workflows yet.</p></div>'; return; }
+  $('wf-list').innerHTML = wfs.map(w => `
+    <div class="wf-card">
+      <div class="wf-card-top">
+        <div>
+          <div class="wf-name">${esc(w.name)}</div>
+          ${w.description ? `<div class="wf-desc">${esc(w.description)}</div>` : ''}
+        </div>
+        <div class="wf-actions">
+          <label class="toggle"><input type="checkbox" ${w.is_active?'checked':''} onchange="toggleWf('${w.id}',this.checked)"><span class="toggle-track"></span></label>
+          <button class="wf-btn runs" onclick="showRuns('${w.id}','${esc(w.name)}')">History</button>
+          <button class="wf-btn test" onclick="testWorkflow('${w.id}')">▶ Test</button>
+          <button class="wf-btn edit" onclick="editWorkflow('${w.id}')">Edit</button>
+          <button class="wf-btn delete" onclick="deleteWorkflow('${w.id}','${esc(w.name)}')">Delete</button>
+        </div>
+      </div>
+      <div class="wf-badges">
+        <span class="badge badge-blue">⚡ ${esc(TRIGGER_LABELS[w.trigger_type]||w.trigger_type)}</span>
+        ${w.delay_hours > 0 ? `<span class="badge badge-purple">⏱ ${w.delay_hours}h</span>` : '<span class="badge badge-green">⚡ Immediate</span>'}
+        ${w.is_agentic ? '<span class="badge badge-orange">🤖 Agentic</span>' : ''}
+        ${(w.actions||[]).length ? `<span class="badge badge-gray">${w.actions.length} action${w.actions.length>1?'s':''}</span>` : ''}
+        ${(w.conditions||[]).length ? `<span class="badge badge-gray">${w.conditions.length} cond.</span>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+async function toggleWf(id, active) { await fetch(`${API}/api/workflows/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({is_active: active})}); }
+async function deleteWorkflow(id, name) { if (!confirm(`Delete "${name}"?`)) return; await fetch(`${API}/api/workflows/${id}`, {method:'DELETE'}); loadWorkflows(); }
+function editWorkflow(id) { const w = _wfCache[id]; if (!w) { alert('Refresh and try again.'); return; } openWorkflowModal(w); }
+
+async function testWorkflow(id) {
+  const w = _wfCache[id]; if (!w) return;
+  const DUMMY = {
+    appointment_booked:    {patient_id:'TEST001',specialty:'cardiology',doctor_id:'doc_001',date:today(),confirmation_number:'APT-TEST'},
+    appointment_completed: {patient_id:'TEST001',specialty:'cardiology',doctor_id:'doc_001',confirmation_number:'APT-TEST'},
+    appointment_cancelled: {patient_id:'TEST001',specialty:'dermatology',confirmation_number:'APT-TEST'},
+    patient_no_show:       {patient_id:'TEST001',specialty:'general-practice',doctor_id:'doc_006'},
+    new_patient:           {patient_id:'TEST001'},
+    scheduled:             {patient_id:'TEST001'},
+  };
+  try {
+    const t1 = await fetch(`${API}/api/workflows/trigger`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trigger_type: w.trigger_type, trigger_data: DUMMY[w.trigger_type]||{patient_id:'TEST001'}})}).then(r => r.json());
+    if (t1.status !== 'triggered') { showToast(`⚠️ Trigger failed`, 'warning'); return; }
+    showToast('⚡ Queued — executing…');
+    const t2 = await fetch(`${API}/api/workflows/run-now`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({force:true})}).then(r => r.json());
+    showToast(t2.processed > 0 ? `✅ ${t2.processed} run(s) done. Check History.` : '⚠️ No runs — check conditions.', t2.processed > 0 ? 'success' : 'warning');
+  } catch(e) { showToast(`❌ ${e.message}`, 'error'); }
+}
+
+function openWorkflowModal(w = null) {
+  $('wf-modal-title').textContent = w ? '⚙️ Edit Workflow' : '⚙️ New Workflow';
+  $('wf-id').value      = w ? w.id : '';
+  $('wf-name').value    = w ? w.name : '';
+  $('wf-desc').value    = w ? w.description : '';
+  $('wf-trigger').value = w ? w.trigger_type : 'appointment_booked';
+  $('wf-delay').value   = w ? w.delay_hours : 0;
+  $('wf-active').checked  = w ? w.is_active  : true;
+  $('wf-agentic').checked = w ? w.is_agentic : false;
+  $('wf-conds').innerHTML = ''; $('wf-acts').innerHTML = '';
+  if (w) { (w.conditions||[]).forEach(c => addCondition(c)); (w.actions||[]).forEach(a => addAction(a)); }
+  openModal('wf-modal');
+}
+
+function addCondition(ex = null) {
+  const id = 'c-' + Date.now(), div = document.createElement('div');
+  div.className = 'dyn-item'; div.id = id;
+  div.innerHTML = `
+    <select style="flex:0 0 110px">${COND_FIELDS.map(f=>`<option value="${f}"${ex&&ex.field===f?' selected':''}>${f}</option>`).join('')}</select>
+    <select style="flex:0 0 100px">${COND_OPS.map(o=>`<option value="${o}"${ex&&ex.operator===o?' selected':''}>${o.replace('_',' ')}</option>`).join('')}</select>
+    <input type="text" placeholder="value" value="${ex?esc(ex.value||''):''}"/>
+    <button type="button" class="remove-btn" onclick="this.closest('.dyn-item').remove()">✕</button>`;
+  $('wf-conds').appendChild(div);
+}
+
+function addAction(ex = null) {
+  const id = 'a-' + Date.now(), div = document.createElement('div');
+  div.className = 'dyn-item'; div.id = id; div.style.flexDirection = 'column';
+  const type = ex ? ex.type : 'send_notification';
+  div.innerHTML = `
+    <div style="display:flex;gap:8px;width:100%;margin-bottom:6px">
+      <select style="flex:1" onchange="renderActCfg('${id}',this.value)">${ACTION_TYPES.map(a=>`<option value="${a.value}"${type===a.value?' selected':''}>${a.label}</option>`).join('')}</select>
+      <button type="button" class="remove-btn" onclick="this.closest('.dyn-item').remove()">✕</button>
+    </div>
+    <div id="${id}-cfg" style="width:100%;padding-left:4px"></div>`;
+  $('wf-acts').appendChild(div);
+  renderActCfg(id, type, ex ? (ex.config||{}) : {});
+}
+
+function renderActCfg(pid, type, cfg = {}) {
+  const el = $(`${pid}-cfg`);
+  const inp = (key, ph, val='') => `<input type="text" placeholder="${esc(ph)}" value="${esc(val)}" data-cfg="${key}" style="margin-bottom:5px;width:100%;padding:8px 11px;border:1.5px solid var(--border);border-radius:8px"/>`;
+  const ta  = (key, ph, val='') => `<textarea placeholder="${esc(ph)}" data-cfg="${key}" style="min-height:52px;font-size:.87em;padding:7px 10px;width:100%;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;resize:vertical">${esc(val)}</textarea>`;
+  if (type === 'send_notification') el.innerHTML = `${inp('title','Title (e.g. Follow-Up Reminder)', cfg.title||'')}${ta('message','Message — use {{patient_id}}, {{specialty}}', cfg.message||'')}<select data-cfg="type" style="width:100%;padding:8px 11px;border:1.5px solid var(--border);border-radius:8px;margin-top:5px">${['info','reminder','warning','urgent'].map(t=>`<option${cfg.type===t?' selected':''}>${t}</option>`).join('')}</select>`;
+  else if (type === 'auto_book_followup') el.innerHTML = `<input type="number" placeholder="Days after trigger" value="${cfg.days_after||7}" data-cfg="days_after" style="margin-bottom:5px;width:100%;padding:8px 11px;border:1.5px solid var(--border);border-radius:8px"/>${inp('preferred_time','Preferred time HH:MM',cfg.preferred_time||'10:00')}${inp('reason','Reason',cfg.reason||'Follow-up appointment')}`;
+  else if (type === 'notify_doctor') el.innerHTML = `${inp('title','Alert title',cfg.title||'Patient Alert')}${ta('message','Alert message',cfg.message||'')}`;
+  else if (type === 'run_agent') el.innerHTML = ta('prompt','Prompt for AI agent',cfg.prompt||'');
+  else el.innerHTML = '';
+}
+
+function collectForm() {
+  const conditions = [];
+  $('wf-conds').querySelectorAll('.dyn-item').forEach(item => {
+    const sels = item.querySelectorAll('select'), inp = item.querySelector('input[type=text]');
+    if (sels.length >= 2 && inp?.value.trim()) conditions.push({field: sels[0].value, operator: sels[1].value, value: inp.value.trim()});
+  });
+  const actions = [];
+  $('wf-acts').querySelectorAll('.dyn-item').forEach(item => {
+    const ts = item.querySelector('select'); if (!ts) return;
+    const cfg = {};
+    item.querySelector('[id$="-cfg"]')?.querySelectorAll('[data-cfg]').forEach(el => {
+      cfg[el.dataset.cfg] = el.tagName === 'TEXTAREA' ? el.value : el.type === 'number' ? Number(el.value) : el.value;
+    });
+    actions.push({type: ts.value, config: cfg});
+  });
+  return {conditions, actions};
+}
+
+async function saveWorkflow() {
+  const name = $('wf-name').value.trim(); if (!name) { alert('Workflow name required.'); return; }
+  const {conditions, actions} = collectForm(); if (!actions.length) { alert('Add at least one action.'); return; }
+  const id = $('wf-id').value;
+  const payload = {name, description: $('wf-desc').value.trim(), trigger_type: $('wf-trigger').value, delay_hours: parseInt($('wf-delay').value)||0, conditions, actions, is_active: $('wf-active').checked, is_agentic: $('wf-agentic').checked};
+  try {
+    const res = await fetch(id ? `${API}/api/workflows/${id}` : `${API}/api/workflows`, {method: id?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if (!res.ok) throw new Error(await res.text());
+    closeModal('wf-modal'); loadWorkflows();
+  } catch(e) { alert(`Save failed: ${e.message}`); }
+}
+
+async function showRuns(wfId, name) {
+  $('runs-title').textContent = `History — ${name}`;
+  $('runs-list').innerHTML = '<p style="color:var(--gray);font-size:.88em">Loading…</p>';
+  openModal('runs-modal');
+  try {
+    const d = await fetch(`${API}/api/workflows/${wfId}/runs`).then(r => r.json());
+    const runs = d.runs || [];
+    if (!runs.length) { $('runs-list').innerHTML = '<p style="color:var(--gray);text-align:center;padding:20px">No runs yet.</p>'; return; }
+    $('runs-list').innerHTML = runs.map(r => {
+      const td = r.trigger_data || {};
+      const acts = (r.actions_taken||[]).map(a => `${a.action}: ${a.result?.status||'?'}`).join(' · ');
+      return `<div class="run-item" style="${r.status==='failed'?'border-color:#ef9a9a;background:#fff8f8':''}">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:.88em">${new Date(r.created_at).toLocaleString([],{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+          ${td.patient_id ? `<div style="font-size:.78em;color:var(--gray)">Patient: ${esc(td.patient_id)}</div>` : ''}
+          ${acts ? `<div style="font-size:.76em;color:var(--gray)">${esc(acts)}</div>` : ''}
+          ${r.status==='failed'&&r.error_message ? `<div style="font-size:.76em;color:var(--red);margin-top:2px">⚠️ ${esc(r.error_message)}</div>` : ''}
+        </div>
+        <span class="run-badge ${r.status}">${r.status}</span>
+      </div>`;
+    }).join('');
+  } catch(e) { $('runs-list').innerHTML = `<p style="color:var(--red)">Error: ${esc(e.message)}</p>`; }
+}
+
+// ── Notifications ──────────────────────────────────────────────────────────
+async function loadRecentNotifications() {
+  $('notif-content').innerHTML = '<p style="color:var(--gray);padding:16px 0">Loading…</p>';
+  try {
+    const d = await fetch(`${API}/api/notifications/recent`).then(r => r.json());
+    const notifs = d.notifications || [];
+    if (!notifs.length) { $('notif-content').innerHTML = '<div class="empty"><div class="empty-icon">🔔</div><p>No notifications yet.</p></div>'; return; }
+    const groups = {};
+    notifs.forEach(n => { if (!groups[n.patient_id]) groups[n.patient_id] = []; groups[n.patient_id].push(n); });
+    let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><strong>All Notifications</strong><span style="font-size:.82em;color:var(--gray)">${notifs.length} total</span></div>`;
+    Object.entries(groups).forEach(([pid, items]) => {
+      html += `<div class="notif-group-lbl" onclick="$('notif-input').value='${esc(pid)}';loadNotifications('${esc(pid)}')">📂 ${esc(pid)} <span style="font-weight:400">(${items.length})</span></div>`;
+      html += items.map(n => renderNotifItem(n, () => loadRecentNotifications())).join('');
+    });
+    $('notif-content').innerHTML = html;
+    updateBell(notifs);
+  } catch(e) { $('notif-content').innerHTML = `<div class="empty"><p style="color:var(--red)">⚠️ ${esc(e.message)}</p></div>`; }
+}
+
+async function loadNotifications(patientId) {
+  const pid = patientId || $('notif-input').value.trim();
+  if (!pid) { showToast('Enter a patient or doctor ID first.', 'warning'); return; }
+  _notifId = pid; $('notif-input').value = pid;
+  $('notif-content').innerHTML = '<p style="color:var(--gray);padding:16px 0">Loading…</p>';
+  try {
+    const d = await fetch(`${API}/api/notifications/${encodeURIComponent(pid)}`).then(r => r.json());
+    const notifs = d.notifications || [];
+    updateBell(notifs);
+    if (!notifs.length) { $('notif-content').innerHTML = `<div class="empty"><div class="empty-icon">🔔</div><p>No notifications for <strong>${esc(pid)}</strong>.</p></div>`; return; }
+    const unread = notifs.filter(n => !n.is_read).length;
+    $('notif-content').innerHTML =
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <strong>Notifications: ${esc(pid)}</strong>
+        ${unread > 0 ? `<button class="btn btn-outline" style="font-size:.8em;padding:5px 12px" onclick="markAllRead()">Mark all read (${unread})</button>` : ''}
+      </div>` +
+      notifs.map(n => renderNotifItem(n, () => loadNotifications(_notifId))).join('');
+  } catch(e) { $('notif-content').innerHTML = `<div class="empty"><p style="color:var(--red)">⚠️ ${esc(e.message)}</p></div>`; }
+}
+
+function renderNotifItem(n, onRead) {
+  const d = new Date(n.created_at);
+  const t = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const typeColors = {info:'badge-blue',reminder:'badge-purple',warning:'badge-orange',urgent:'badge-red',doctor_alert:'badge-green'};
+  return `<div class="notif-item${n.is_read?'':' unread'}" id="ni-${n.id}">
+    <div class="notif-dot"></div>
+    <div class="notif-body">
+      <div class="notif-title">${esc(n.title||'Notification')}</div>
+      <div class="notif-msg">${esc(n.message||'')}</div>
+      <div class="notif-meta">
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="notif-time">${t}</span>
+          <span class="badge ${typeColors[n.type]||'badge-gray'}">${esc(n.type||'info')}</span>
+        </div>
+        ${!n.is_read ? `<button class="mark-read-btn" onclick="markRead('${n.id}')">Mark read</button>` : '<span style="font-size:.74em;color:#9e9e9e">✓ read</span>'}
+      </div>
+    </div>
+  </div>`;
+}
+
+async function markRead(id) {
+  await fetch(`${API}/api/notifications/${id}/read`, {method:'POST'});
+  if (_notifId) loadNotifications(_notifId); else loadRecentNotifications();
+}
+
+async function markAllRead() {
+  const btns = $('notif-content').querySelectorAll('.mark-read-btn');
+  const ids = [...btns].map(b => { const m = b.getAttribute('onclick').match(/'([^']+)'/); return m ? m[1] : null; }).filter(Boolean);
+  await Promise.all(ids.map(id => fetch(`${API}/api/notifications/${id}/read`, {method:'POST'})));
+  showToast(`Marked ${ids.length} as read`);
+  loadNotifications(_notifId);
+}
+
+function updateBell(notifs) {
+  const badge = $('bell-badge'), count = notifs.filter(n => !n.is_read).length;
+  if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.hidden = false; }
+  else badge.hidden = true;
+}
+
+function startNotifPoll() { stopNotifPoll(); if (_notifId) _notifTimer = setInterval(() => loadNotifications(_notifId), 30000); }
+function stopNotifPoll()  { if (_notifTimer) { clearInterval(_notifTimer); _notifTimer = null; } }
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+if (loadAuth()) enterApp();
+</script>
+</body>
+</html>
