@@ -59,7 +59,7 @@ Populate the initial data:
 5. Running the Application
 Start the FastAPI server:
 bash run.sh
-The application will be available at http://localhost:8000.
+The application will be available at https://healthcare-agent-4o1k.onrender.com/.
 
 ## Security
 This project uses Supabase IAM and Row Level Security to ensure patient data privacy. Sensitive keys are managed via environment variables and are excluded from version control via .gitignore.
