@@ -53,6 +53,18 @@ def _sse(event_data: dict) -> str:
     return f"data: {json.dumps(event_data)}\n\n"
 
 
+def _sanitize_history(history: list) -> list:
+    """Strip orphaned tool messages that have no preceding assistant+tool_calls entry."""
+    sanitized = []
+    for msg in history:
+        if msg["role"] == "tool":
+            if sanitized and sanitized[-1]["role"] == "assistant" and sanitized[-1].get("tool_calls"):
+                sanitized.append(msg)
+        else:
+            sanitized.append(msg)
+    return sanitized
+
+
 async def run(session_id: str, user_message: str) -> AsyncGenerator[str, None]:
     """
     Main agent loop. Yields SSE strings:
@@ -68,7 +80,7 @@ async def run(session_id: str, user_message: str) -> AsyncGenerator[str, None]:
     from mistralai import Mistral
     client = Mistral(api_key=api_key)
 
-    history = session_store.get_history(session_id)
+    history = _sanitize_history(session_store.get_history(session_id))
     history.append({"role": "user", "content": user_message})
 
     system_msg = {"role": "system", "content": SYSTEM_PROMPT.format(today=datetime.now().strftime("%Y-%m-%d"))}
