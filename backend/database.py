@@ -20,7 +20,12 @@ class Database:
         url = os.getenv("SUPABASE_URL")
         key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
         if not url or not key:
-            raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in .env")
+            raise ValueError(
+                f"Missing env vars — SUPABASE_URL={'SET' if url else 'MISSING'}, "
+                f"SUPABASE_SERVICE_KEY={'SET' if key else 'MISSING'}"
+            )
+        import logging
+        logging.getLogger(__name__).info(f"Supabase connecting to: {url[:40]}...")
         self.client: Client = create_client(url, key)
 
     # ── Doctors ───────────────────────────────────────────────────────────────

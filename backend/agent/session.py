@@ -22,8 +22,3 @@ def clear(session_id: str):
     _sessions.pop(session_id, None)
 
 
-def purge_expired():
-    now = time.time()
-    expired = [sid for sid, d in _sessions.items() if now - d["last_active"] > SESSION_TTL]
-    for sid in expired:
-        del _sessions[sid]

@@ -1,11 +1,11 @@
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Body, HTTPException, Depends, Header
+from fastapi import FastAPI, Body, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from dotenv import load_dotenv
-from backend.mcp import tools, call_tool, get_available_tools
+from backend.mcp import call_tool, get_available_tools
 from backend.auth import (
     hash_password, verify_password, create_token,
     get_current_user, require_admin, require_doctor_or_admin,
@@ -29,9 +29,76 @@ load_dotenv()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from backend.workflows import scheduler
+    _seed_default_workflows()
     scheduler.start()
     yield
     scheduler.stop()
+
+
+def _seed_default_workflows():
+    """Insert built-in workflows if they don't already exist (idempotent)."""
+    DEFAULTS = [
+        {
+            "name": "Smart Follow-Up",
+            "description": "AI reviews the appointment reason and specialty, decides the optimal next visit, and books it automatically.",
+            "trigger_type": "appointment_completed",
+            "delay_hours": 0,
+            "is_active": True,
+            "is_agentic": True,
+            "conditions": [],
+            "actions": [
+                {
+                    "type": "run_agent",
+                    "config": {
+                        "prompt": (
+                            "You are a healthcare follow-up coordinator. A patient just completed an appointment.\n\n"
+                            "Details:\n"
+                            "- Patient ID: {{patient_id}}\n"
+                            "- Specialty / Department: {{specialty}}\n"
+                            "- Reason for visit: {{reason}}\n"
+                            "- Attending doctor: {{doctor_id}}\n\n"
+                            "Your tasks:\n"
+                            "1. Based on the specialty and reason, decide whether a follow-up is needed and how soon "
+                            "(e.g. 3 days for acute issues, 1–2 weeks for routine, 4–6 weeks for chronic management, "
+                            "none for one-off procedures).\n"
+                            "2. If a follow-up IS needed, book an appointment using the book_appointment tool — "
+                            "choose an appropriate morning slot (09:00–12:00), the same specialty, "
+                            "and reason 'Follow-up: {{reason}}'.\n"
+                            "3. Send the patient a warm, personalised message explaining: what was decided, why, "
+                            "what to watch for, and the new appointment details if booked.\n"
+                            "4. If no follow-up is needed, send a brief positive discharge message instead.\n\n"
+                            "Be specific to the patient's situation. Do not use generic templates."
+                        )
+                    },
+                }
+            ],
+        }
+    ]
+    try:
+        from backend.database import get_db
+        db = get_db()
+        for wf in DEFAULTS:
+            exists = (
+                db.client.table("workflows")
+                .select("id")
+                .eq("name", wf["name"])
+                .limit(1)
+                .execute()
+            )
+            if not exists.data:
+                db.client.table("workflows").insert(wf).execute()
+                logger.info(f"Seeded default workflow: {wf['name']}")
+            else:
+                # Keep the definition up to date (preserves is_active set by user)
+                db.client.table("workflows").update({
+                    "description": wf["description"],
+                    "delay_hours": wf["delay_hours"],
+                    "actions": wf["actions"],
+                    "is_agentic": wf["is_agentic"],
+                    "conditions": wf["conditions"],
+                }).eq("name", wf["name"]).execute()
+    except Exception as e:
+        logger.warning(f"Could not seed default workflows: {e}")
 
 
 app = FastAPI(
@@ -342,11 +409,20 @@ async def agent_chat(payload: Dict[str, Any] = Body(...)):
     """
     message = payload.get("message", "").strip()
     session_id = payload.get("session_id", "default")
+    patient_id = (payload.get("patient_id") or "").strip()
 
     if not message:
         async def _err():
             yield 'data: {"type": "error", "message": "Empty message"}\n\n'
         return StreamingResponse(_err(), media_type="text/event-stream")
+
+    # Inject the logged-in patient's ID so the agent always books under the right patient
+    if patient_id:
+        message = (
+            f"{message}"
+            f"\n\n[System: The current user's patient ID is '{patient_id}'. "
+            f"Always use this exact patient ID for bookings and appointment lookups unless the user asks about someone else.]"
+        )
 
     from backend.agent.orchestrator import run as agent_run
 
@@ -457,15 +533,53 @@ def run_pending_now(payload: Dict[str, Any] = Body(default={})):
     """
     from backend.workflows.engine import execute_pending_runs
     force = payload.get("force", False)
-    result = execute_pending_runs(force=force)
+    workflow_id = payload.get("workflow_id")  # optional: scope to one workflow (Test button)
+    result = execute_pending_runs(force=force, workflow_id=workflow_id)
     return {"status": "ok", **result}
+
+
+# ── Patient appointments summary ─────────────────────────────────────────
+
+@app.get("/api/patients/{patient_id}/appointments")
+def get_patient_appointments(patient_id: str):
+    """Return last completed and next upcoming appointments for a patient."""
+    from backend.database import get_db
+    db = get_db()
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+    last_resp = (
+        db.client.table("appointments")
+        .select("*, doctors(name, specialty)")
+        .eq("patient_id", patient_id)
+        .lt("appointment_date", today_str)
+        .order("appointment_date", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    next_resp = (
+        db.client.table("appointments")
+        .select("*, doctors(name, specialty)")
+        .eq("patient_id", patient_id)
+        .gte("appointment_date", today_str)
+        .eq("status", "confirmed")
+        .order("appointment_date")
+        .limit(1)
+        .execute()
+    )
+
+    return {
+        "last_appointment": last_resp.data[0] if last_resp.data else None,
+        "next_appointment": next_resp.data[0] if next_resp.data else None,
+    }
 
 
 # ── Notifications endpoint ────────────────────────────────────────────────
 
 @app.get("/api/notifications/recent")
-def get_recent_notifications(limit: int = 30):
-    """Return the most recent notifications across all patients/doctors."""
+def get_recent_notifications(limit: int = 30, authorization: Optional[str] = Header(None)):
+    """Return the most recent notifications across all patients/doctors. Admin only."""
+    require_admin(authorization)
     from backend.database import get_db
     db = get_db()
     response = (
@@ -479,8 +593,17 @@ def get_recent_notifications(limit: int = 30):
 
 
 @app.get("/api/notifications/{patient_id}")
-def get_notifications(patient_id: str, unread_only: bool = False):
+def get_notifications(patient_id: str, unread_only: bool = False, authorization: Optional[str] = Header(None)):
     from backend.database import get_db
+    user = get_current_user(authorization)
+    if user["role"] != "admin":
+        # Build the set of valid IDs for this user (linked_id or username fallback)
+        if user["role"] == "doctor":
+            valid = {f"doctor:{user['linked_id']}", f"doctor:{user['username']}"} if user.get("linked_id") else {f"doctor:{user['username']}"}
+        else:
+            valid = {user.get("linked_id"), user["username"]} - {None, ""}
+        if patient_id not in valid:
+            raise HTTPException(403, "You can only view your own notifications")
     db = get_db()
 
     query = (
@@ -557,22 +680,3 @@ def serve_frontend():
 
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR), name="frontend-assets")
-
-# ── Serve Frontend ────────────────────────────────────────────────────────
-
-FRONTEND_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "frontend"
-)
-
-@app.get("/")
-def serve_frontend():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
-
-# Serve all frontend files
-if os.path.isdir(FRONTEND_DIR):
-    app.mount(
-        "/static",
-        StaticFiles(directory=FRONTEND_DIR),
-        name="static"
-    )

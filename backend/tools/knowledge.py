@@ -1,18 +1,16 @@
+import logging
 from backend.rag import retriever
+
+logger = logging.getLogger(__name__)
 
 
 def search(query: str, top_k: int = 5) -> dict:
-    """
-    Search the medical knowledge base using RAG.
-    Returns relevant context chunks for the given query.
-    """
-    print(f"\n🔧 TOOL CALLED: search_knowledge_base")
-    print(f"   Query: {query}")
-
+    """Search the medical knowledge base using RAG."""
+    logger.info(f"search_knowledge_base: {query!r}")
     chunks = retriever.search(query, top_k=top_k)
 
     if not chunks:
-        print("   ⚠️  No relevant chunks found")
+        logger.warning("No relevant chunks found for query")
         return {
             "found": False,
             "query": query,
@@ -21,8 +19,7 @@ def search(query: str, top_k: int = 5) -> dict:
         }
 
     context = retriever.format_context(chunks)
-    print(f"   ✅ Found {len(chunks)} relevant chunks")
-
+    logger.info(f"Found {len(chunks)} relevant chunks")
     return {
         "found": True,
         "query": query,

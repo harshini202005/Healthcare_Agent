@@ -1,29 +1,22 @@
-
 import os
+import logging
 from mistralai import Mistral
 
+logger = logging.getLogger(__name__)
+
+
 def generate(preferences, calories=None, allergies=None):
-    """
-    Generate a personalized diet plan based on preferences.
-    
-    Args:
-        preferences: Dietary preference (vegetarian, vegan, keto, etc.)
-        calories: Target daily calorie intake (optional)
-        allergies: List of food allergies or restrictions (optional)
-    """
-    print(f"\n🔧 TOOL CALLED: generate_diet")
-    print(f"   Preferences: {preferences}")
-    print(f"   Calories: {calories or 'Not specified'}")
-    print(f"   Allergies: {allergies or 'None'}")
-    
+    """Generate a personalized diet plan based on preferences."""
+    logger.info(f"generate_diet: preferences={preferences}, calories={calories}, allergies={allergies}")
+
     if allergies is None:
         allergies = []
-    
+
     api_key = os.getenv("MISTRAL_API_KEY")
-    
+
     if not api_key or api_key == "your-mistral-api-key-here":
-        print(f"   ⚠️ Mistral API key not configured, using template response")
-        diet_plan = {
+        logger.warning("Mistral API key not configured — returning template diet plan")
+        return {
             "error": False,
             "message": "🥗 Here's your personalized diet plan",
             "preference": preferences,
@@ -35,23 +28,21 @@ def generate(preferences, calories=None, allergies=None):
                 "Lunch": f"Nutritious {preferences} lunch - quinoa bowl with vegetables (500 cal)",
                 "Afternoon Snack": "Fresh fruits and nuts (200 cal)",
                 "Dinner": f"Balanced {preferences} dinner with protein and veggies (600 cal)",
-                "Evening": "Herbal tea (0 cal)"
+                "Evening": "Herbal tea (0 cal)",
             },
             "tips": [
                 "💧 Stay hydrated - drink 8-10 glasses of water daily",
                 "🥗 Include variety of colorful vegetables",
                 "🍽️ Practice portion control",
                 "🧘 Eat mindfully and avoid distractions",
-                "🏃 Combine with 30 minutes of daily exercise"
+                "🏃 Combine with 30 minutes of daily exercise",
             ],
-            "note": "⚠️ Configure Mistral API key in .env for AI-powered recommendations"
+            "note": "⚠️ Configure Mistral API key in .env for AI-powered recommendations",
         }
-        return diet_plan
-    
+
     try:
         client = Mistral(api_key=api_key)
-
-        allergy_str = ', '.join(allergies) if allergies else 'None'
+        allergy_str = ", ".join(allergies) if allergies else "None"
         calorie_target = calories or 2000
 
         prompt = f"""Create a one-day diet plan with these exact constraints:
@@ -97,30 +88,29 @@ Respond in this exact format — no deviations:
                         "You never fabricate calorie counts — use standard nutritional reference values. "
                         f"CRITICAL: The user has these allergies/restrictions: {allergy_str}. "
                         "Before finalizing each meal, verify it contains NONE of these allergens."
-                    )
+                    ),
                 },
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            max_tokens=900
+            max_tokens=900,
         )
-        
+
         diet_content = response.choices[0].message.content
-        print(f"   ✅ Result: AI diet plan generated with Mistral")
-        
+        logger.info("AI diet plan generated successfully")
         return {
             "error": False,
-            "message": "🥗 Your AI-Powered Personalized Diet Plan (Mistral AI)",
+            "message": "🥗 Your AI-Powered Personalized Diet Plan",
             "plan": diet_content,
             "preference": preferences,
             "daily_calories": calories or 2000,
-            "allergies": allergies or ["None"]
+            "allergies": allergies or ["None"],
         }
-        
+
     except Exception as e:
-        print(f"   ❌ Error: {str(e)}")
+        logger.error(f"generate_diet error: {e}")
         return {
             "error": True,
-            "message": f"Failed to generate diet plan: {str(e)}",
-            "fallback": "Please check your Mistral API key configuration in .env file"
+            "message": f"Failed to generate diet plan: {e}",
+            "fallback": "Please check your Mistral API key configuration in .env file",
         }

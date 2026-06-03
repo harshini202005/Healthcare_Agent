@@ -1,65 +1,163 @@
-# Healthcare Assistant Platform 
+# 🏥 Healthcare Assistant - AI-Powered Health Management System
 
-An intelligent, agent-driven healthcare platform that leverages **Mistral AI** and **Supabase** to provide automated appointment scheduling, medical knowledge retrieval via RAG, and clinical workflow automation.
+A modern healthcare management system with AI-powered chat interface, diet planning, and appointment booking capabilities.
 
-##  Key Features
+## 🚀 Quick Start
 
-- **Agentic Chat Interface**: A conversational AI powered by Mistral AI that uses function-calling (MCP tools) to interact with medical data.
-- **RAG (Retrieval-Augmented Generation)**: Uses `pgvector` similarity search to provide grounded answers based on a private medical knowledge base.
-- **Appointment Management**: Automated booking engine with real-time conflict detection and doctor schedule management.
-- **Workflow Automation**: Trigger-based engine for automated notifications (via Resend) and background task execution.
-- **Real-time Updates**: FastAPI-powered Server-Sent Events (SSE) for seamless chat streaming and notification polling.
+### Option 1: Simple One-Command Start (Recommended)
+```bash
+./start.sh
+```
 
-##  Tech Stack
+### Option 2: Using Python
+```bash
+# Activate virtual environment first
+source .venv/bin/activate
 
-- **Backend**: FastAPI (Python)
-- **AI/LLM**: Mistral AI (Large 2 & Embeddings)
-- **Database**: Supabase (PostgreSQL + `pgvector`)
-- **Frontend**: Single-Page Application (HTML/JS)
-- **Security**: Supabase RLS (Row Level Security) and IAM schemas
-- **Communication**: Resend API for email notifications
+# Run the application
+python main.py
+```
 
-##  Project Structure
+### Option 3: Manual Start
+```bash
+# 1. Activate virtual environment
+source .venv/bin/activate
 
-```text
-├── backend/
-│   ├── agent/            # Mistral orchestrator and tool registry
-│   ├── rag/              # Ingestion, embedding, and retrieval logic
-│   ├── tools/            # Appointment booking and knowledge tools
-│   ├── workflows/        # Automation engine and schedulers
-│   └── database.py       # Supabase client and CRUD operations
-├── frontend/             # SPA for chat and admin dashboards
-├── supabase_schema.sql   # Core DDL for healthcare tables and vector search
-├── main.py               # FastAPI application entry point
-├── seed_database.py      # Utility to populate initial doctor/schedule data
-└── requirements.txt      # Project dependencies
- ```
-
-## Setup Instructions
-1. Prerequisites
-Python 3.9+
-A Supabase project with pgvector enabled
-API Keys for Mistral AI and Resend
-2. Installation
-Clone the repository and install dependencies:
-git clone https://github.com/harshini202005/healthcare_agent.git
-cd healthcare_agent
-python -m venv .venv
-source .venv/bin/activate  # Or `.venv\Scripts\activate` on Windows
+# 2. Install dependencies (first time only)
 pip install -r requirements.txt
-3. Environment Configuration
-Create a .env file based on .env.example:
-MISTRAL_API_KEY=your_mistral_key
-SUPABASE_URL=your_project_url
-SUPABASE_KEY=your_service_role_key
-RESEND_API_KEY=your_resend_key
-4. Database Setup
-Run the contents of supabase_schema.sql and supabase_iam_schema.sql in your Supabase SQL Editor.
-Populate the initial data:
-5. Running the Application
-Start the FastAPI server:
-bash run.sh
-The application will be available at https://healthcare-agent-4o1k.onrender.com/.
 
-## Security
-This project uses Supabase IAM and Row Level Security to ensure patient data privacy. Sensitive keys are managed via environment variables and are excluded from version control via .gitignore.
+# 3. Start the server
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+## 📱 Access the Application
+
+1. **Backend API**: http://localhost:8000
+2. **Frontend**: Open `frontend/index.html` in your browser
+3. **API Docs**: http://localhost:8000/docs
+
+## ✨ Features
+
+### 💬 Smart Chat Interface
+- Natural language understanding
+- Automatically detects your intent (health query, diet plan, or appointment)
+- No need to select tools manually!
+
+### 🥗 Diet Plan Generator
+Just ask naturally:
+- "Generate a vegetarian diet plan for 2000 calories"
+- "Give me a keto meal plan"
+- "Create a diabetic-friendly diet"
+
+### 📅 Appointment Booking
+Book appointments conversationally:
+- "Book an appointment for PAT001 tomorrow at 10 AM for general checkup"
+- "Schedule a cardiology visit for PAT123 at 2 PM"
+
+### 💊 General Health Assistant
+Ask any health question:
+- "What are the benefits of drinking water?"
+- "How much sleep do I need?"
+- "Tips for staying healthy"
+
+## 🛠️ Setup (First Time)
+
+```bash
+# 1. Create virtual environment
+python3 -m venv .venv
+
+# 2. Activate it
+source .venv/bin/activate  # On Mac/Linux
+# or
+.venv\Scripts\activate  # On Windows
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Run the application
+python main.py
+```
+
+## 📦 Project Structure
+
+```
+Healthcare/
+├── backend/
+│   ├── main.py          # FastAPI application
+│   ├── mcp.py           # MCP server implementation
+│   └── tools/           # Tool implementations
+│       ├── general.py   # Health Q&A
+│       ├── diet.py      # Diet plan generator
+│       └── booking.py   # Appointment booking
+├── frontend/
+│   └── index.html       # Chat interface
+├── main.py              # Application launcher
+├── start.sh             # Quick start script
+├── requirements.txt     # Python dependencies
+└── bookings.json        # Appointment storage
+```
+
+## 🎯 Example Queries
+
+Try these in the chat interface:
+
+**Health Questions:**
+- "What are the benefits of meditation?"
+- "How to improve my immune system?"
+- "Best exercises for weight loss"
+
+**Diet Plans:**
+- "Create a 1800 calorie vegetarian diet plan"
+- "Generate a high-protein meal plan for muscle building"
+- "Keto diet plan with no dairy"
+
+**Appointments:**
+- "Book appointment for PAT001 tomorrow at 3 PM for checkup"
+- "Schedule cardiology consultation for PAT456 next Monday at 10 AM"
+
+## 🔧 Troubleshooting
+
+### Server won't start?
+```bash
+# Make sure virtual environment is activated
+source .venv/bin/activate
+
+# Reinstall dependencies
+pip install -r requirements.txt
+
+# Try running directly
+python main.py
+```
+
+### Port 8000 already in use?
+```bash
+# Find and kill the process
+lsof -ti:8000 | xargs kill -9
+
+# Or use a different port
+uvicorn backend.main:app --reload --port 8001
+```
+
+### Frontend not connecting?
+- Make sure backend is running on http://localhost:8000
+- Check browser console for errors
+- Try opening frontend/index.html directly in browser
+
+## 📝 API Endpoints
+
+- `GET /` - API information
+- `GET /mcp/tools` - List available tools
+- `POST /mcp/call` - Call a specific tool
+- `GET /docs` - Interactive API documentation
+
+## 🤝 Contributing
+
+Feel free to enhance the system with:
+- More health tools
+- Better NLP for query understanding
+- Additional features like medication tracking
+- Integration with real healthcare APIs
+
+## 📄 License
+
+This project is for educational and demonstration purposes.

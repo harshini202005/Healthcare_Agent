@@ -54,6 +54,24 @@ def book(
 
     db = get_db()
 
+    # Block duplicate patient booking at the same date+time
+    existing = (
+        db.client.table("appointments")
+        .select("confirmation_number")
+        .eq("patient_id", user_id)
+        .eq("appointment_date", date)
+        .eq("appointment_time", time)
+        .neq("status", "cancelled")
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        return {
+            "error": True,
+            "message": f"You already have an appointment on {date} at {time} (#{existing.data[0]['confirmation_number']}). "
+                       f"Please cancel it first or choose a different time.",
+        }
+
     if doctor_id:
         doctor = db.get_doctor_by_id(doctor_id)
         if not doctor:

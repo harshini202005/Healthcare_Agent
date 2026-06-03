@@ -1,278 +1,149 @@
-"""
-Doctor management tools for Healthcare MCP Server
-Handles doctor queries, availability checks, and slot generation
-"""
-
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
+import logging
+from typing import Optional, Dict, Any
+from datetime import datetime
 from backend.database import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def get_doctors(specialty: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get list of doctors, optionally filtered by specialty
-    
-    Args:
-        specialty: Medical specialty to filter by (e.g., 'cardiology', 'dermatology')
-    
-    Returns:
-        List of doctors with their details
-    """
-    print(f"\n🔧 TOOL CALLED: get_doctors")
-    print(f"   Specialty: {specialty or 'All'}")
-    
+    """Get available doctors, optionally filtered by specialty."""
+    logger.info(f"get_doctors: specialty={specialty or 'all'}")
     db = get_db()
-    
+
     try:
         doctors = db.get_doctors(specialty)
-        
+
         if not doctors:
             return {
                 "message": f"No doctors found{f' for specialty: {specialty}' if specialty else ''}",
                 "doctors": [],
-                "suggestion": "Try searching for a different specialty"
+                "suggestion": "Try searching for a different specialty",
             }
-        
-        # Format response
-        formatted_doctors = []
+
         specialties_found = set()
-        
+        formatted = []
         for doc in doctors:
             specialties_found.add(doc.get("specialty", "").title())
-            formatted_doctors.append({
+            formatted.append({
                 "id": doc["id"],
                 "name": doc["name"],
                 "specialty": doc["specialty"].title(),
                 "experience": f"{doc.get('years_experience', 'N/A')} years",
-                "email": doc.get("email", "N/A")
+                "email": doc.get("email", "N/A"),
             })
-        
-        print(f"   ✅ Found {len(doctors)} doctors")
-        
+
+        logger.info(f"Found {len(formatted)} doctors")
         return {
-            "message": f"Found {len(doctors)} doctor(s)",
+            "message": f"Found {len(formatted)} doctor(s)",
             "specialties_available": list(specialties_found),
-            "doctors": formatted_doctors,
-            "instruction": "Use get_available_slots to check when these doctors are available"
+            "doctors": formatted,
+            "instruction": "Use get_available_slots to check when these doctors are available",
         }
-        
+
     except Exception as e:
-        print(f"   ❌ Error: {e}")
-        return {
-            "error": True,
-            "message": f"Failed to fetch doctors: {str(e)}",
-            "doctors": []
-        }
+        logger.error(f"get_doctors error: {e}")
+        return {"error": True, "message": f"Failed to fetch doctors: {e}", "doctors": []}
 
 
 def get_available_slots(specialty: str, date: str, doctor_id: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get available appointment slots for a specific date and specialty
-    
-    Args:
-        specialty: Medical specialty required
-        date: Date to check (YYYY-MM-DD format)
-        doctor_id: Specific doctor ID (optional - if not provided, checks all doctors in specialty)
-    
-    Returns:
-        Available time slots with doctor assignments
-    """
-    print(f"\n🔧 TOOL CALLED: get_available_slots")
-    print(f"   Specialty: {specialty}")
-    print(f"   Date: {date}")
-    print(f"   Doctor ID: {doctor_id or 'Any'}")
-    
-    # Validate date format
+    """Get available appointment time slots for a given specialty and date."""
+    logger.info(f"get_available_slots: specialty={specialty}, date={date}, doctor_id={doctor_id}")
+
     try:
         check_date = datetime.strptime(date, "%Y-%m-%d").date()
         today = datetime.now().date()
-        
         if check_date < today:
-            return {
-                "error": True,
-                "message": f"Cannot check availability for past date: {date}",
-                "suggestion": "Please provide a future date"
-            }
-            
-        weekday = check_date.weekday()  # 0=Monday
-        
-        # Weekend check (Saturday=5, Sunday=6)
-        if weekday >= 5:
-            return {
-                "message": "Clinic is closed on weekends",
-                "available_slots": [],
-                "suggestion": "Please choose a weekday (Monday-Friday)"
-            }
-            
+            return {"error": True, "message": f"Cannot check availability for past date: {date}", "suggestion": "Provide a future date"}
+        if check_date.weekday() >= 5:
+            return {"message": "Clinic is closed on weekends", "available_slots": [], "suggestion": "Choose a weekday (Monday–Friday)"}
     except ValueError:
-        return {
-            "error": True,
-            "message": f"Invalid date format: {date}",
-            "suggestion": "Use YYYY-MM-DD format (e.g., 2026-01-25)"
-        }
-    
+        return {"error": True, "message": f"Invalid date format: {date}", "suggestion": "Use YYYY-MM-DD"}
+
     db = get_db()
-    
+
     try:
-        # If specific doctor requested, verify they exist
-        target_doctors = []
         if doctor_id:
             doctor = db.get_doctor_by_id(doctor_id)
             if not doctor:
-                return {
-                    "error": True,
-                    "message": f"Doctor not found: {doctor_id}",
-                    "suggestion": "Use get_doctors to find valid doctor IDs"
-                }
+                return {"error": True, "message": f"Doctor not found: {doctor_id}", "suggestion": "Use get_doctors to find valid IDs"}
             if doctor["specialty"].lower() != specialty.lower():
-                return {
-                    "error": True,
-                    "message": f"Doctor {doctor['name']} specializes in {doctor['specialty']}, not {specialty}",
-                    "suggestion": "Choose a doctor matching your required specialty"
-                }
+                return {"error": True, "message": f"Doctor {doctor['name']} specialises in {doctor['specialty']}, not {specialty}"}
             target_doctors = [doctor]
         else:
-            # Get all doctors for this specialty
             target_doctors = db.get_doctors(specialty)
-            
+
         if not target_doctors:
-            return {
-                "message": f"No doctors available for {specialty}",
-                "available_slots": [],
-                "suggestion": "Try a different specialty or date"
-            }
-        
-        # Generate 15-minute slots
-        available_slots = []
-        slot_times = []
-        
-        for hour in range(9, 17):  # 9 AM to 5 PM
-            for minute in [0, 15, 30, 45]:
-                slot_time = f"{hour:02d}:{minute:02d}"
-                
-                # Skip last 15 minutes of day
-                if hour == 17 and minute > 0:
-                    continue
-                    
-                slot_times.append(slot_time)
-        
-        # Check each slot against each doctor
+            return {"message": f"No doctors available for {specialty}", "available_slots": [], "suggestion": "Try a different specialty or date"}
+
+        slot_times = [
+            f"{h:02d}:{m:02d}"
+            for h in range(9, 17)
+            for m in [0, 15, 30, 45]
+        ]
+
+        slots_by_time: Dict[str, list] = {}
         for slot_time in slot_times:
             for doctor in target_doctors:
-                # Check if doctor is already booked
-                conflict = db.check_doctor_conflict(doctor["id"], date, slot_time)
-                
-                if not conflict:
-                    available_slots.append({
-                        "time": slot_time,
+                if not db.check_doctor_conflict(doctor["id"], date, slot_time):
+                    slots_by_time.setdefault(slot_time, []).append({
                         "doctor_id": doctor["id"],
                         "doctor_name": doctor["name"],
-                        "specialty": doctor["specialty"].title()
                     })
-        
-        if not available_slots:
-            return {
-                "message": f"No available slots for {specialty} on {date}",
-                "available_slots": [],
-                "suggestion": "Try a different date or check if doctors have availability overrides"
-            }
-        
-        # Group by time slot for better readability
-        slots_by_time = {}
-        for slot in available_slots:
-            time = slot["time"]
-            if time not in slots_by_time:
-                slots_by_time[time] = []
-            slots_by_time[time].append({
-                "doctor_id": slot["doctor_id"],
-                "doctor_name": slot["doctor_name"]
-            })
-        
-        print(f"   ✅ Found {len(available_slots)} available slots")
-        
+
+        if not slots_by_time:
+            return {"message": f"No available slots for {specialty} on {date}", "available_slots": [], "suggestion": "Try a different date"}
+
+        logger.info(f"Found {len(slots_by_time)} available time slots")
         return {
             "message": f"Found {len(slots_by_time)} available time slots for {specialty}",
             "date": date,
             "specialty": specialty.title(),
             "available_slots": slots_by_time,
-            "total_options": len(available_slots),
-            "instruction": "Use book_appointment with doctor_id to book a specific slot"
+            "instruction": "Use book_appointment with doctor_id to book a specific slot",
         }
-        
+
     except Exception as e:
-        print(f"   ❌ Error: {e}")
-        return {
-            "error": True,
-            "message": f"Failed to get available slots: {str(e)}",
-            "available_slots": []
-        }
+        logger.error(f"get_available_slots error: {e}")
+        return {"error": True, "message": f"Failed to get available slots: {e}", "available_slots": []}
 
 
 def get_doctor_schedule(doctor_identifier: str) -> Dict[str, Any]:
-    """
-    Get weekly schedule for a specific doctor
-    
-    Args:
-        doctor_identifier: Doctor's unique ID (e.g., 'doc_001') or name (e.g., 'Priya Patel')
-    
-    Returns:
-        Weekly schedule with working hours
-    """
-    print(f"\n🔧 TOOL CALLED: get_doctor_schedule")
-    print(f"   Identifier: {doctor_identifier}")
-    
+    """Get the weekly schedule for a doctor by ID or name."""
+    logger.info(f"get_doctor_schedule: {doctor_identifier!r}")
     db = get_db()
-    
+
     try:
-        # Try to find doctor by ID first, then by name
         doctor = None
-        
-        if doctor_identifier.startswith('doc_'):
-            # Looks like an ID
+        if doctor_identifier.startswith("doc_"):
             doctor = db.get_doctor_by_id(doctor_identifier)
-        
+
         if not doctor:
-            # Try searching by name
-            search_results = db.search_doctors(doctor_identifier)
-            if search_results:
-                doctor = search_results[0]
-                print(f"   ✅ Found doctor by name: {doctor['name']} ({doctor['id']})")
-        
+            results = db.search_doctors(doctor_identifier)
+            if results:
+                doctor = results[0]
+
         if not doctor:
             return {
                 "error": True,
                 "message": f"Doctor not found: '{doctor_identifier}'",
-                "suggestion": "Use get_doctors to see all available doctors, or provide the doctor ID (e.g., doc_001) or full/partial name (e.g., 'Priya Patel')"
+                "suggestion": "Use get_doctors to see all available doctors, or provide the doctor ID or full name",
             }
-        
-        # Use the actual doctor ID for schedule lookup
-        actual_doctor_id = doctor['id']
-        schedules = db.get_doctor_schedule(actual_doctor_id)
-        
+
+        schedules = db.get_doctor_schedule(doctor["id"])
         days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        formatted_schedule = []
-        
-        for sched in schedules:
-            day_idx = sched.get("day_of_week", 0)
-            if sched.get("is_available"):
-                formatted_schedule.append({
-                    "day": days[day_idx],
-                    "hours": f"{sched['start_time']} - {sched['end_time']}"
-                })
-        
+        formatted_schedule = [
+            {"day": days[s.get("day_of_week", 0)], "hours": f"{s['start_time']} - {s['end_time']}"}
+            for s in schedules
+            if s.get("is_available")
+        ]
+
         return {
             "message": f"Weekly schedule for {doctor['name']}",
-            "doctor": {
-                "id": doctor["id"],
-                "name": doctor["name"],
-                "specialty": doctor["specialty"].title()
-            },
-            "schedule": formatted_schedule
+            "doctor": {"id": doctor["id"], "name": doctor["name"], "specialty": doctor["specialty"].title()},
+            "schedule": formatted_schedule,
         }
-        
+
     except Exception as e:
-        print(f"   ❌ Error: {e}")
-        return {
-            "error": True,
-            "message": f"Failed to get schedule: {str(e)}"
-        }
+        logger.error(f"get_doctor_schedule error: {e}")
+        return {"error": True, "message": f"Failed to get schedule: {e}"}

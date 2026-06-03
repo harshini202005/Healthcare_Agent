@@ -521,7 +521,13 @@ input, select, textarea { font-family: inherit; font-size: 1em; }
     <div class="scroll-panel">
       <div class="panel-header">
         <h2>⚙️ Workflows</h2>
-        <button class="btn btn-primary" onclick="openWorkflowModal()">+ New</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="position:relative" id="tpl-wrapper">
+            <button class="btn btn-outline" onclick="toggleTemplates()">Templates ▾</button>
+            <div id="tpl-dropdown" style="display:none;position:absolute;right:0;top:110%;background:var(--card-bg);border:1.5px solid var(--border);border-radius:10px;z-index:200;min-width:260px;box-shadow:0 4px 20px rgba(0,0,0,.18)"></div>
+          </div>
+          <button class="btn btn-primary" onclick="openWorkflowModal()">+ New</button>
+        </div>
       </div>
       <div id="wf-list"><div class="empty"><div class="empty-icon">⚙️</div><p>Loading workflows…</p></div></div>
     </div>
@@ -538,13 +544,13 @@ input, select, textarea { font-family: inherit; font-size: 1em; }
   <!-- NOTIFICATIONS -->
   <div class="tab-panel" id="tab-notifications">
     <div class="scroll-panel">
-      <div class="notif-search">
+      <div class="notif-search" id="notif-search-row">
         <input id="notif-input" type="text" placeholder="Patient ID or doctor:doc_001" onkeydown="if(event.key==='Enter') loadNotifications()"/>
         <button class="btn btn-primary" onclick="loadNotifications()">Load</button>
         <button class="btn btn-outline" onclick="loadRecentNotifications()">Recent</button>
       </div>
       <div id="notif-content">
-        <div class="empty"><div class="empty-icon">🔔</div><p>Enter an ID or click <strong>Recent</strong> to see all notifications.</p></div>
+        <div class="empty"><div class="empty-icon">🔔</div><p>Loading your notifications…</p></div>
       </div>
     </div>
   </div>
@@ -624,7 +630,7 @@ input, select, textarea { font-family: inherit; font-size: 1em; }
           <option value="new_patient">New Patient Registered</option>
         </select>
       </div>
-      <div class="field"><label>Delay (hours after trigger)</label><input id="wf-delay" type="number" placeholder="0" min="0" max="720" value="0"/><div class="hint">0 = immediate. 168 = 7 days.</div></div>
+      <div class="field"><label>Delay (days after trigger)</label><input id="wf-delay" type="number" placeholder="0" min="0" max="7" value="0"/><div class="hint">0 = immediate. Max 7 days.</div></div>
       <div class="field"><label>Conditions <span class="opt">(all must match)</span></label><div class="dyn-list" id="wf-conds"></div><button type="button" class="add-btn" onclick="addCondition()">+ Add Condition</button></div>
       <div class="field"><label>Actions <span class="req">*</span></label><div class="dyn-list" id="wf-acts"></div><button type="button" class="add-btn" onclick="addAction()">+ Add Action</button></div>
       <div class="two-col" style="margin-top:10px;">
@@ -647,12 +653,35 @@ input, select, textarea { font-family: inherit; font-size: 1em; }
   </div>
 </div>
 
+<!-- ══ WORKFLOW RESULT MODAL ══ -->
+<div class="modal-overlay" id="wf-result-modal">
+  <div class="modal-card wide">
+    <div class="modal-header"><h2 id="wf-result-title">▶ Workflow Result</h2><button class="modal-close" onclick="closeModal('wf-result-modal')">✕</button></div>
+    <div class="modal-body"><div id="wf-result-body"></div></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('wf-result-modal')">Close</button></div>
+  </div>
+</div>
+
+<!-- ══ NOTIFICATION DETAIL MODAL ══ -->
+<div class="modal-overlay" id="notif-detail-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>🔔 Notification Details</h2>
+      <button class="modal-close" onclick="closeModal('notif-detail-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="notif-detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('notif-detail-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 // ── State ──────────────────────────────────────────────────────────────────
 const API = '';
 let _user = null, _token = null;
-let _allergyList = [], _wfCache = {};
+let _allergyList = [], _wfCache = {}, _notifCache = {};
 let _notifId = '', _notifTimer = null;
 let _thinkIds = [], _processing = false;
 
@@ -682,7 +711,6 @@ function showToast(msg, type='success') {
 }
 
 // ── Modal helpers ──────────────────────────────────────────────────────────
-function openModal(id)  { $(id).classList.add('open'); }
 function closeModal(id) { $(id).classList.remove('open'); }
 document.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) closeModal(e.target.id);
@@ -697,8 +725,13 @@ function switchTab(name) {
   if (name === 'workflows')   loadWorkflows();
   if (name === 'doctor')      { $('doc-date').value || ($('doc-date').value = today()); loadDoctorPatients(); }
   if (name === 'admin-users') loadAdminUsers();
-  if (name === 'notifications') { startNotifPoll(); if (_notifId) loadNotifications(_notifId); }
-  else stopNotifPoll();
+  if (name === 'notifications') {
+    if (_notifId) {
+      loadNotifications(_notifId);
+    } else {
+      loadRecentNotifications(); // admin with no filter
+    }
+  }
 }
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -758,7 +791,7 @@ async function doSignup() {
 }
 
 function doLogout() {
-  clearAuth(); stopNotifPoll();
+  clearAuth(); stopNotifPoll(); _notifId = ''; _notifCache = {};
   $('app').style.display = 'none';
   $('auth-overlay').style.display = 'flex';
   $('l-user').value = ''; $('l-pass').value = '';
@@ -775,7 +808,22 @@ function enterApp() {
   $('tb-doctor').style.display      = ['doctor','admin'].includes(u.role) ? '' : 'none';
   $('tb-workflows').style.display   = u.role === 'admin' ? '' : 'none';
   $('tb-admin-users').style.display = u.role === 'admin' ? '' : 'none';
-  if (u.role === 'patient' && u.linked_id) { _notifId = u.linked_id; $('notif-input').value = u.linked_id; }
+  if (u.role === 'patient') {
+    // Use linked patient ID if set, fall back to username so there's always a valid lookup key
+    _notifId = u.linked_id || u.username;
+    $('notif-input').value = _notifId;
+  } else if (u.role === 'doctor') {
+    _notifId = u.linked_id ? 'doctor:' + u.linked_id : 'doctor:' + u.username;
+    $('notif-input').value = _notifId;
+  }
+  // Only admins can search arbitrary IDs or load all-recent
+  $('notif-search-row').style.display = u.role === 'admin' ? '' : 'none';
+  // Fetch initial unread count for bell badge and start polling
+  if (_notifId) {
+    fetch(`${API}/api/notifications/${encodeURIComponent(_notifId)}`)
+      .then(r => r.json()).then(d => updateBell(d.notifications || [])).catch(() => {});
+    startNotifPoll();
+  }
   switchTab(u.role === 'doctor' ? 'doctor' : u.role === 'admin' ? 'workflows' : 'chat');
 }
 
@@ -843,9 +891,11 @@ async function sendMessage() {
   inp.value = ''; inp.style.height = 'auto';
   _processing = true; $('send-btn').disabled = true; _thinkIds = [];
   try {
+    const chatPayload = {message: msg, session_id: getSessionId()};
+    if (_user?.role === 'patient') chatPayload.patient_id = _user.linked_id || _user.username;
     const resp = await fetch(`${API}/api/chat`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({message: msg, session_id: getSessionId()}),
+      body: JSON.stringify(chatPayload),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const reader = resp.body.getReader();
@@ -886,7 +936,7 @@ $('userInput').addEventListener('input', function() { this.style.height = 'auto'
 })();
 
 function openModal(id) {
-  if (id === 'booking-modal' && _user?.role === 'patient' && _user?.linked_id) $('b-pid').value = _user.linked_id;
+  if (id === 'booking-modal' && _user?.role === 'patient') $('b-pid').value = _user.linked_id || _user.username || '';
   if (id === 'diet-modal') { _allergyList = []; renderTags(); $('d-pref').selectedIndex = 0; $('d-cal').value = ''; }
   document.getElementById(id).classList.add('open');
 }
@@ -1021,6 +1071,117 @@ const ACTION_TYPES = [{value:'send_notification',label:'Notify Patient'},{value:
 const COND_FIELDS = ['specialty','patient_id','doctor_id','reason','date'];
 const COND_OPS    = ['equals','not_equals','contains','not_contains'];
 
+const WF_TEMPLATES = [
+  {
+    name: 'Smart Follow-Up (Agentic)',
+    description: 'AI reviews reason + specialty and decides the optimal next visit — books it automatically.',
+    trigger_type: 'appointment_completed',
+    delay_hours: 24,
+    is_agentic: true,
+    is_active: true,
+    conditions: [],
+    actions: [{
+      type: 'run_agent',
+      config: {
+        prompt: `You are a healthcare follow-up coordinator. A patient just completed an appointment.
+
+Details:
+- Patient ID: {{patient_id}}
+- Specialty / Department: {{specialty}}
+- Reason for visit: {{reason}}
+- Attending doctor: {{doctor_id}}
+
+Your tasks:
+1. Based on the specialty and reason, decide whether a follow-up is needed and how soon (e.g. 3 days for acute issues, 1–2 weeks for routine, 4–6 weeks for chronic management, none for one-off procedures).
+2. If a follow-up IS needed, book an appointment using the book_appointment tool — choose an appropriate morning slot (09:00–12:00), the same specialty, and reason "Follow-up: {{reason}}".
+3. Send the patient a warm, personalised message explaining: what was decided, why, what to watch for, and the new appointment details if booked.
+4. If no follow-up is needed, send a brief positive discharge message instead.
+
+Be specific to the patient's situation. Do not use generic templates.`
+      }
+    }]
+  },
+  {
+    name: 'No-Show Re-Engagement (Agentic)',
+    description: 'AI reaches out to missed-appointment patients and reschedules within 3–5 days.',
+    trigger_type: 'patient_no_show',
+    delay_hours: 2,
+    is_agentic: true,
+    is_active: true,
+    conditions: [],
+    actions: [{
+      type: 'run_agent',
+      config: {
+        prompt: `A patient missed their scheduled appointment. Re-engage them warmly.
+
+Details:
+- Patient ID: {{patient_id}}
+- Missed: {{specialty}} on {{date}} at {{time}}
+- Original reason: {{reason}}
+
+Your tasks:
+1. Look up the patient's recent appointment history with the available tools.
+2. Book a new appointment within the next 3–5 days at a morning slot (09:00–11:00), same specialty.
+3. Send a friendly notification with the new appointment details and a brief note on why continuity of care matters.`
+      }
+    }]
+  },
+  {
+    name: 'Appointment Confirmation',
+    description: 'Immediately confirms a booking and reminds the patient what to bring.',
+    trigger_type: 'appointment_booked',
+    delay_hours: 0,
+    is_agentic: false,
+    is_active: true,
+    conditions: [],
+    actions: [{
+      type: 'send_notification',
+      config: {
+        title: 'Appointment Confirmed',
+        message: 'Your {{specialty}} appointment is confirmed for {{date}} at {{time}}. Please arrive 15 minutes early with your insurance card and photo ID.',
+        type: 'reminder'
+      }
+    }]
+  },
+  {
+    name: 'New Patient Welcome',
+    description: 'Greets new patients and explains how to use the platform.',
+    trigger_type: 'new_patient',
+    delay_hours: 0,
+    is_agentic: false,
+    is_active: true,
+    conditions: [],
+    actions: [{
+      type: 'send_notification',
+      config: {
+        title: 'Welcome to Our Clinic!',
+        message: 'Your patient account is ready. You can book appointments, view your history, and chat with our AI health assistant any time. We\'re glad you\'re here.',
+        type: 'info'
+      }
+    }]
+  }
+];
+
+function toggleTemplates() {
+  const dd = $('tpl-dropdown');
+  if (dd.style.display !== 'none') { dd.style.display = 'none'; return; }
+  dd.innerHTML = WF_TEMPLATES.map((t, i) => `
+    <div onclick="useTemplate(${i})" style="padding:11px 15px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--hover-bg,#f5f5f5)'" onmouseout="this.style.background=''">
+      <div style="font-weight:600;font-size:.88em">${esc(t.name)}</div>
+      <div style="font-size:.8em;color:var(--text-muted,#888);margin-top:2px">${esc(t.description)}</div>
+    </div>`).join('');
+  dd.style.display = 'block';
+}
+
+function useTemplate(i) {
+  $('tpl-dropdown').style.display = 'none';
+  openWorkflowModal(WF_TEMPLATES[i]);
+}
+
+document.addEventListener('click', e => {
+  if (!$('tpl-wrapper')?.contains(e.target)) { const dd = $('tpl-dropdown'); if (dd) dd.style.display = 'none'; }
+});
+
 async function loadWorkflows() {
   try {
     const d = await fetch(`${API}/api/workflows`).then(r => r.json());
@@ -1048,7 +1209,7 @@ function renderWorkflows(wfs) {
       </div>
       <div class="wf-badges">
         <span class="badge badge-blue">⚡ ${esc(TRIGGER_LABELS[w.trigger_type]||w.trigger_type)}</span>
-        ${w.delay_hours > 0 ? `<span class="badge badge-purple">⏱ ${w.delay_hours}h</span>` : '<span class="badge badge-green">⚡ Immediate</span>'}
+        ${w.delay_hours > 0 ? `<span class="badge badge-purple">⏱ ${w.delay_hours < 24 ? w.delay_hours + 'h' : Math.round(w.delay_hours/24) + 'd'}</span>` : '<span class="badge badge-green">⚡ Immediate</span>'}
         ${w.is_agentic ? '<span class="badge badge-orange">🤖 Agentic</span>' : ''}
         ${(w.actions||[]).length ? `<span class="badge badge-gray">${w.actions.length} action${w.actions.length>1?'s':''}</span>` : ''}
         ${(w.conditions||[]).length ? `<span class="badge badge-gray">${w.conditions.length} cond.</span>` : ''}
@@ -1070,24 +1231,145 @@ async function testWorkflow(id) {
     new_patient:           {patient_id:'TEST001'},
     scheduled:             {patient_id:'TEST001'},
   };
+
+  // Show "executing" state in result modal
+  $('wf-result-title').textContent = `▶ ${esc(w.name)}`;
+  $('wf-result-body').innerHTML = `<div style="text-align:center;padding:24px;color:var(--gray)">
+    <div style="font-size:1.8em;margin-bottom:8px">⚙️</div>
+    <div style="font-weight:600">Triggering workflow…</div>
+  </div>`;
+  openModal('wf-result-modal');
+
   try {
-    const t1 = await fetch(`${API}/api/workflows/trigger`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trigger_type: w.trigger_type, trigger_data: DUMMY[w.trigger_type]||{patient_id:'TEST001'}})}).then(r => r.json());
-    if (t1.status !== 'triggered') { showToast(`⚠️ Trigger failed`, 'warning'); return; }
-    showToast('⚡ Queued — executing…');
-    const t2 = await fetch(`${API}/api/workflows/run-now`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({force:true})}).then(r => r.json());
-    showToast(t2.processed > 0 ? `✅ ${t2.processed} run(s) done. Check History.` : '⚠️ No runs — check conditions.', t2.processed > 0 ? 'success' : 'warning');
-  } catch(e) { showToast(`❌ ${e.message}`, 'error'); }
+    const t1 = await fetch(`${API}/api/workflows/trigger`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({trigger_type: w.trigger_type, trigger_data: DUMMY[w.trigger_type]||{patient_id:'TEST001'}})
+    }).then(r => r.json());
+
+    if (t1.status !== 'triggered') {
+      $('wf-result-body').innerHTML = `<div class="empty"><p style="color:var(--red)">⚠️ Trigger failed</p></div>`;
+      return;
+    }
+
+    $('wf-result-body').innerHTML = `<div style="text-align:center;padding:24px;color:var(--gray)">
+      <div style="font-size:1.8em;margin-bottom:8px">⚡</div>
+      <div style="font-weight:600">Executing actions…</div>
+      ${w.is_agentic ? '<div style="font-size:.85em;margin-top:6px">AI agent is thinking — this may take a moment</div>' : ''}
+    </div>`;
+
+    const t2 = await fetch(`${API}/api/workflows/run-now`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({force: true, workflow_id: id})
+    }).then(r => r.json());
+
+    if (!t2.processed) {
+      // Scheduler may have already picked up the run — fetch most recent run from history
+      $('wf-result-body').innerHTML = `<div style="text-align:center;padding:16px;color:var(--gray);font-size:.88em">
+        ⏱ Run was already picked up by the scheduler. Loading result…
+      </div>`;
+      try {
+        const hist = await fetch(`${API}/api/workflows/${id}/runs`).then(r => r.json());
+        const recent = (hist.runs || []).find(r => r.status === 'completed' || r.status === 'failed');
+        if (recent) {
+          const pseudoT2 = {
+            processed: 1,
+            runs: [{
+              status: recent.status,
+              actions_taken: parseActions(recent.actions_taken),
+              error_message: recent.error_message,
+            }]
+          };
+          $('wf-result-body').innerHTML =
+            `<div style="margin-bottom:10px;padding:8px 12px;background:#e3f2fd;border-radius:8px;font-size:.83em;color:var(--blue)">
+               ℹ️ Executed by the background scheduler — showing most recent run
+             </div>` + renderWorkflowResults(pseudoT2);
+        } else {
+          $('wf-result-body').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>No runs found — check your workflow conditions.</p></div>`;
+        }
+      } catch(_) {
+        $('wf-result-body').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>No runs executed — check your workflow conditions.</p></div>`;
+      }
+      return;
+    }
+
+    $('wf-result-body').innerHTML = renderWorkflowResults(t2);
+  } catch(e) {
+    $('wf-result-body').innerHTML = `<div class="empty"><p style="color:var(--red)">❌ ${esc(e.message)}</p></div>`;
+  }
+}
+
+function renderWorkflowResults(t2, compact = false) {
+  const ACTION_ICONS = {send_notification:'🔔', notify_doctor:'👨‍⚕️', auto_book_followup:'📅', run_agent:'🤖'};
+  const ACTION_LABELS = {send_notification:'Notify Patient', notify_doctor:'Alert Doctor', auto_book_followup:'Auto Book Follow-Up', run_agent:'AI Agent'};
+
+  let html = '';
+  if (!compact) {
+    html = `<div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:${t2.processed > 0 ? '#e8f5e9' : '#fff8e1'};border:1px solid ${t2.processed > 0 ? '#a5d6a7' : '#ffe082'}">
+      <strong style="color:${t2.processed > 0 ? 'var(--green)' : '#f57f17'}">${t2.processed > 0 ? `✅ ${t2.processed} run(s) completed` : '⚠️ No runs executed'}</strong>
+    </div>`;
+  }
+
+  (t2.runs || []).forEach((run, ri) => {
+    html += `<div style="margin-bottom:16px">`;
+    if (t2.runs.length > 1) html += `<div style="font-weight:700;font-size:.85em;margin-bottom:8px;color:var(--gray)">Run ${ri+1}: ${esc(run.workflow||'')}</div>`;
+
+    const actions = parseActions(run.actions_taken);
+    if (!actions.length) {
+      html += `<div style="color:var(--gray);font-size:.88em;padding:8px 0">No actions were executed.</div>`;
+    } else {
+      actions.forEach((a, ai) => {
+        const ok = a.result?.status === 'success';
+        const icon = ACTION_ICONS[a.action] || '⚙️';
+        const label = ACTION_LABELS[a.action] || a.action;
+        html += `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border-bottom:1px solid var(--border)">
+            <span>${icon}</span>
+            <strong style="font-size:.9em;flex:1">${esc(label)}</strong>
+            <span style="font-size:.78em;font-weight:700;padding:2px 8px;border-radius:10px;background:${ok ? '#e8f5e9' : '#ffebee'};color:${ok ? 'var(--green)' : 'var(--red)'}">
+              ${ok ? '✓ Success' : '✗ Failed'}
+            </span>
+          </div>
+          <div style="padding:10px 12px;font-size:.87em">`;
+
+        const r = a.result || {};
+        if (!ok && r.error) {
+          html += `<div style="color:var(--red)">⚠️ ${esc(r.error)}</div>`;
+        } else if (a.action === 'run_agent' && r.response) {
+          html += `<div style="white-space:pre-wrap;line-height:1.55;color:#333">${esc(r.response)}</div>`;
+        } else if (a.action === 'send_notification') {
+          html += `<div>📬 Notification sent to <strong>${esc(r.patient_id || '')}</strong></div>`;
+          if (r.title) html += `<div style="margin-top:4px;color:var(--gray)">Title: ${esc(r.title)}</div>`;
+          if (r.email_sent) html += `<div style="margin-top:4px;color:var(--green);font-size:.85em">✉️ Email also sent</div>`;
+        } else if (a.action === 'notify_doctor') {
+          html += `<div>👨‍⚕️ Alert sent to doctor <strong>${esc(r.doctor_id || '')}</strong></div>`;
+          if (r.email_sent) html += `<div style="margin-top:4px;color:var(--green);font-size:.85em">✉️ Email also sent</div>`;
+        } else if (a.action === 'auto_book_followup') {
+          html += `<div>📅 Follow-up booked: <strong>${esc(r.confirmation || '')}</strong> on ${esc(r.date || '')}</div>`;
+        } else {
+          html += `<div style="color:var(--gray)">${esc(JSON.stringify(r))}</div>`;
+        }
+        html += `</div></div>`;
+      });
+    }
+
+    if (run.error_message) {
+      html += `<div style="padding:8px 10px;background:#ffebee;border-radius:6px;font-size:.85em;color:var(--red)">⚠️ ${esc(run.error_message)}</div>`;
+    }
+    html += `</div>`;
+  });
+  return html;
 }
 
 function openWorkflowModal(w = null) {
-  $('wf-modal-title').textContent = w ? '⚙️ Edit Workflow' : '⚙️ New Workflow';
-  $('wf-id').value      = w ? w.id : '';
+  const isEdit = w && w.id;
+  $('wf-modal-title').textContent = isEdit ? '⚙️ Edit Workflow' : (w ? '⚙️ New from Template' : '⚙️ New Workflow');
+  $('wf-id').value      = isEdit ? w.id : '';
   $('wf-name').value    = w ? w.name : '';
-  $('wf-desc').value    = w ? w.description : '';
+  $('wf-desc').value    = w ? (w.description || '') : '';
   $('wf-trigger').value = w ? w.trigger_type : 'appointment_booked';
-  $('wf-delay').value   = w ? w.delay_hours : 0;
-  $('wf-active').checked  = w ? w.is_active  : true;
-  $('wf-agentic').checked = w ? w.is_agentic : false;
+  $('wf-delay').value   = w ? Math.round((w.delay_hours||0) / 24) : 0;
+  $('wf-active').checked  = w ? (w.is_active !== false) : true;
+  $('wf-agentic').checked = w ? !!w.is_agentic : false;
   $('wf-conds').innerHTML = ''; $('wf-acts').innerHTML = '';
   if (w) { (w.conditions||[]).forEach(c => addCondition(c)); (w.actions||[]).forEach(a => addAction(a)); }
   openModal('wf-modal');
@@ -1149,14 +1431,30 @@ function collectForm() {
 
 async function saveWorkflow() {
   const name = $('wf-name').value.trim(); if (!name) { alert('Workflow name required.'); return; }
-  const {conditions, actions} = collectForm(); if (!actions.length) { alert('Add at least one action.'); return; }
+  const {conditions, actions} = collectForm();
+  const isAgentic = $('wf-agentic').checked;
+  if (!actions.length && !isAgentic) { alert('Add at least one action (or enable Agentic mode — AI will decide the actions).'); return; }
   const id = $('wf-id').value;
-  const payload = {name, description: $('wf-desc').value.trim(), trigger_type: $('wf-trigger').value, delay_hours: parseInt($('wf-delay').value)||0, conditions, actions, is_active: $('wf-active').checked, is_agentic: $('wf-agentic').checked};
+  const payload = {name, description: $('wf-desc').value.trim(), trigger_type: $('wf-trigger').value, delay_hours: (parseInt($('wf-delay').value)||0) * 24, conditions, actions, is_active: $('wf-active').checked, is_agentic: $('wf-agentic').checked};
   try {
     const res = await fetch(id ? `${API}/api/workflows/${id}` : `${API}/api/workflows`, {method: id?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
     if (!res.ok) throw new Error(await res.text());
     closeModal('wf-modal'); loadWorkflows();
   } catch(e) { alert(`Save failed: ${e.message}`); }
+}
+
+// Safely parse actions_taken whether it comes as a JS array or a JSON string from the DB
+function parseActions(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try { return JSON.parse(raw); } catch(_) { return []; }
+}
+
+// Parse trigger_data whether it is a JS object or a JSON string
+function parseTrigger(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try { return JSON.parse(raw); } catch(_) { return {}; }
 }
 
 async function showRuns(wfId, name) {
@@ -1167,17 +1465,27 @@ async function showRuns(wfId, name) {
     const d = await fetch(`${API}/api/workflows/${wfId}/runs`).then(r => r.json());
     const runs = d.runs || [];
     if (!runs.length) { $('runs-list').innerHTML = '<p style="color:var(--gray);text-align:center;padding:20px">No runs yet.</p>'; return; }
+
     $('runs-list').innerHTML = runs.map(r => {
-      const td = r.trigger_data || {};
-      const acts = (r.actions_taken||[]).map(a => `${a.action}: ${a.result?.status||'?'}`).join(' · ');
-      return `<div class="run-item" style="${r.status==='failed'?'border-color:#ef9a9a;background:#fff8f8':''}">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:.88em">${new Date(r.created_at).toLocaleString([],{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
-          ${td.patient_id ? `<div style="font-size:.78em;color:var(--gray)">Patient: ${esc(td.patient_id)}</div>` : ''}
-          ${acts ? `<div style="font-size:.76em;color:var(--gray)">${esc(acts)}</div>` : ''}
-          ${r.status==='failed'&&r.error_message ? `<div style="font-size:.76em;color:var(--red);margin-top:2px">⚠️ ${esc(r.error_message)}</div>` : ''}
+      const td = parseTrigger(r.trigger_data);
+      const when = new Date(r.created_at).toLocaleString([],{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const pseudoT2 = {
+        processed: 1,
+        runs: [{
+          status: r.status,
+          actions_taken: parseActions(r.actions_taken),
+          error_message: r.error_message,
+        }]
+      };
+      return `<div style="margin-bottom:14px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;background:var(--bg);border-bottom:1px solid var(--border)">
+          <div>
+            <span style="font-weight:600;font-size:.88em">${when}</span>
+            ${td.patient_id ? `<span style="font-size:.78em;color:var(--gray);margin-left:8px">Patient: ${esc(td.patient_id)}</span>` : ''}
+          </div>
+          <span class="run-badge ${r.status}">${r.status}</span>
         </div>
-        <span class="run-badge ${r.status}">${r.status}</span>
+        <div style="padding:10px 13px">${renderWorkflowResults(pseudoT2, true)}</div>
       </div>`;
     }).join('');
   } catch(e) { $('runs-list').innerHTML = `<p style="color:var(--red)">Error: ${esc(e.message)}</p>`; }
@@ -1187,7 +1495,7 @@ async function showRuns(wfId, name) {
 async function loadRecentNotifications() {
   $('notif-content').innerHTML = '<p style="color:var(--gray);padding:16px 0">Loading…</p>';
   try {
-    const d = await fetch(`${API}/api/notifications/recent`).then(r => r.json());
+    const d = await fetch(`${API}/api/notifications/recent`, {headers: authH()}).then(r => r.json());
     const notifs = d.notifications || [];
     if (!notifs.length) { $('notif-content').innerHTML = '<div class="empty"><div class="empty-icon">🔔</div><p>No notifications yet.</p></div>'; return; }
     const groups = {};
@@ -1208,7 +1516,7 @@ async function loadNotifications(patientId) {
   _notifId = pid; $('notif-input').value = pid;
   $('notif-content').innerHTML = '<p style="color:var(--gray);padding:16px 0">Loading…</p>';
   try {
-    const d = await fetch(`${API}/api/notifications/${encodeURIComponent(pid)}`).then(r => r.json());
+    const d = await fetch(`${API}/api/notifications/${encodeURIComponent(pid)}`, {headers: authH()}).then(r => r.json());
     const notifs = d.notifications || [];
     updateBell(notifs);
     if (!notifs.length) { $('notif-content').innerHTML = `<div class="empty"><div class="empty-icon">🔔</div><p>No notifications for <strong>${esc(pid)}</strong>.</p></div>`; return; }
@@ -1223,10 +1531,11 @@ async function loadNotifications(patientId) {
 }
 
 function renderNotifItem(n, onRead) {
+  _notifCache[n.id] = n;
   const d = new Date(n.created_at);
   const t = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   const typeColors = {info:'badge-blue',reminder:'badge-purple',warning:'badge-orange',urgent:'badge-red',doctor_alert:'badge-green'};
-  return `<div class="notif-item${n.is_read?'':' unread'}" id="ni-${n.id}">
+  return `<div class="notif-item${n.is_read?'':' unread'}" id="ni-${n.id}" onclick="showNotifDetail('${n.id}')" style="cursor:pointer">
     <div class="notif-dot"></div>
     <div class="notif-body">
       <div class="notif-title">${esc(n.title||'Notification')}</div>
@@ -1236,10 +1545,80 @@ function renderNotifItem(n, onRead) {
           <span class="notif-time">${t}</span>
           <span class="badge ${typeColors[n.type]||'badge-gray'}">${esc(n.type||'info')}</span>
         </div>
-        ${!n.is_read ? `<button class="mark-read-btn" onclick="markRead('${n.id}')">Mark read</button>` : '<span style="font-size:.74em;color:#9e9e9e">✓ read</span>'}
+        ${!n.is_read ? `<button class="mark-read-btn" onclick="event.stopPropagation();markRead('${n.id}')">Mark read</button>` : '<span style="font-size:.74em;color:#9e9e9e">✓ read</span>'}
       </div>
     </div>
   </div>`;
+}
+
+async function showNotifDetail(id) {
+  const n = _notifCache[id];
+  if (!n) return;
+  if (!n.is_read) markRead(id);
+
+  const meta = n.metadata || {};
+  const typeColors = {info:'badge-blue',reminder:'badge-purple',warning:'badge-orange',urgent:'badge-red',doctor_alert:'badge-green'};
+  const d = new Date(n.created_at);
+  const timeStr = d.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) + ' at ' + d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+  let html = `<div style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span class="badge ${typeColors[n.type]||'badge-gray'}">${esc(n.type||'info')}</span>
+      <span style="font-size:.8em;color:var(--gray)">${timeStr}</span>
+    </div>
+    <div style="font-weight:700;font-size:1.05em;margin-bottom:6px">${esc(n.title||'Notification')}</div>
+    <div style="font-size:.9em;color:#444;line-height:1.55">${esc(n.message||'')}</div>
+  </div>`;
+
+  const hasApptInfo = meta.doctor_name || meta.doctor_id || meta.date || meta.confirmation_number || meta.patient_id;
+  if (hasApptInfo) {
+    html += `<div style="background:var(--bg);border-radius:8px;padding:12px 14px;margin-bottom:12px">
+      <div style="font-weight:700;font-size:.78em;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:8px">Details</div>`;
+    if (meta.patient_id && meta.patient_id !== n.patient_id) html += `<div style="margin-bottom:5px;font-size:.9em">👤 <strong>Patient:</strong> ${esc(meta.patient_id)}</div>`;
+    if (meta.doctor_name) html += `<div style="margin-bottom:5px;font-size:.9em">👨‍⚕️ <strong>Doctor:</strong> ${esc(meta.doctor_name)}</div>`;
+    else if (meta.doctor_id) html += `<div style="margin-bottom:5px;font-size:.9em">👨‍⚕️ <strong>Doctor ID:</strong> ${esc(meta.doctor_id)}</div>`;
+    if (meta.specialty) html += `<div style="margin-bottom:5px;font-size:.9em">🏥 <strong>Specialty:</strong> ${esc(meta.specialty)}</div>`;
+    if (meta.date) html += `<div style="margin-bottom:5px;font-size:.9em">📅 <strong>Date:</strong> ${esc(meta.date)}${meta.time?' at '+esc(meta.time):''}</div>`;
+    if (meta.reason) html += `<div style="margin-bottom:5px;font-size:.9em">📝 <strong>Reason:</strong> ${esc(meta.reason)}</div>`;
+    if (meta.confirmation_number) html += `<div style="font-size:.9em">📋 <strong>Ref:</strong> <code>${esc(meta.confirmation_number)}</code></div>`;
+    html += '</div>';
+  }
+
+  if (_user?.role === 'patient' && _user?.linked_id) {
+    html += `<div id="nd-appts" style="background:#f3f0ff;border-radius:8px;padding:12px 14px">
+      <div style="font-weight:700;font-size:.78em;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:6px">Your Appointments</div>
+      <div style="color:var(--gray);font-size:.85em">Loading…</div>
+    </div>`;
+  }
+
+  $('notif-detail-body').innerHTML = html;
+  openModal('notif-detail-modal');
+
+  if (_user?.role === 'patient' && _user?.linked_id) {
+    try {
+      const apptData = await fetch(`${API}/api/patients/${encodeURIComponent(_user.linked_id)}/appointments`, {headers: authH()}).then(r => r.json());
+      const apptEl = $('nd-appts');
+      if (!apptEl) return;
+      const last = apptData.last_appointment, next = apptData.next_appointment;
+      let aHtml = `<div style="font-weight:700;font-size:.78em;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:6px">Your Appointments</div>`;
+      if (last) {
+        const dn = last.doctors?.name || last.doctor_id || 'Unknown Doctor';
+        aHtml += `<div style="margin-bottom:5px;font-size:.9em">🕐 <strong>Last:</strong> ${esc(last.appointment_date)} with <em>${esc(dn)}</em></div>`;
+      } else {
+        aHtml += `<div style="margin-bottom:5px;font-size:.85em;color:var(--gray)">No previous appointments.</div>`;
+      }
+      if (next) {
+        const dn = next.doctors?.name || next.doctor_id || 'Unknown Doctor';
+        aHtml += `<div style="font-size:.9em">📅 <strong>Next:</strong> ${esc(next.appointment_date)} at ${esc(next.appointment_time||'')} with <em>${esc(dn)}</em></div>`;
+      } else {
+        aHtml += `<div style="font-size:.85em;color:var(--gray)">No upcoming appointments.</div>`;
+      }
+      apptEl.innerHTML = aHtml;
+    } catch(_) {
+      const apptEl = $('nd-appts');
+      if (apptEl) apptEl.innerHTML = `<div style="font-size:.85em;color:var(--red)">Could not load appointments.</div>`;
+    }
+  }
 }
 
 async function markRead(id) {
