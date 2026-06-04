@@ -12,8 +12,12 @@ CREATE TABLE IF NOT EXISTS users (
     role          TEXT NOT NULL CHECK (role IN ('admin', 'doctor', 'patient')),
     linked_id     TEXT,        -- doctor_id (e.g. doc_001) or patient_id (e.g. PAT001)
     is_active     BOOLEAN DEFAULT TRUE,
+    photo_url     TEXT,
     created_at    TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add photo_url to existing users table (safe to run even if already present)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_users_email    ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role     ON users(role);

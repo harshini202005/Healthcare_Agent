@@ -13,17 +13,18 @@ import webbrowser
 import urllib.request
 
 def wait_and_open_browser(url="http://localhost:8000", timeout=30):
-    """Wait for server to be ready, then open browser"""
+    """Wait for server to be ready, then open browser."""
+    # Use 127.0.0.1 for the health-check so we always hit IPv4
+    # (localhost can resolve to ::1 on macOS which uvicorn 0.0.0.0 won't answer)
+    check_url = url.replace("localhost", "127.0.0.1")
     start = time.time()
     while time.time() - start < timeout:
         try:
-            urllib.request.urlopen(url, timeout=1)
+            urllib.request.urlopen(check_url, timeout=1)
             break
-        except (urllib.error.URLError, ConnectionRefusedError, OSError):
+        except Exception:
             time.sleep(0.5)
-    else:
-        print("⚠️  Server didn't start within timeout, opening browser anyway...")
-    
+
     webbrowser.open(url)
     print(f"🌐 Opened {url} in your browser")
 

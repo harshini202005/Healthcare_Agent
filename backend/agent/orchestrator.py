@@ -54,14 +54,39 @@ def _sse(event_data: dict) -> str:
 
 
 def _sanitize_history(history: list) -> list:
-    """Strip orphaned tool messages that have no preceding assistant+tool_calls entry."""
+    """
+    Walk the history and remove any assistant+tool_calls block where the number of
+    following tool-response messages doesn't exactly match the number of tool calls.
+    Mistral rejects requests where these counts differ (error 3230).
+    """
     sanitized = []
-    for msg in history:
-        if msg["role"] == "tool":
-            if sanitized and sanitized[-1]["role"] == "assistant" and sanitized[-1].get("tool_calls"):
+    i = 0
+    while i < len(history):
+        msg = history[i]
+        if msg["role"] == "assistant" and msg.get("tool_calls"):
+            expected_ids = {tc["id"] for tc in msg["tool_calls"]}
+            # Collect all consecutive tool responses that follow
+            j = i + 1
+            tool_responses = []
+            while j < len(history) and history[j]["role"] == "tool":
+                tool_responses.append(history[j])
+                j += 1
+            response_ids = {r.get("tool_call_id") for r in tool_responses}
+            if expected_ids == response_ids:
                 sanitized.append(msg)
+                sanitized.extend(tool_responses)
+            else:
+                logger.warning(
+                    f"Dropping incomplete tool-call block: expected={expected_ids} got={response_ids}"
+                )
+            i = j
+        elif msg["role"] == "tool":
+            # Orphaned tool response with no preceding assistant+tool_calls — drop it
+            logger.warning(f"Dropping orphaned tool message: {msg.get('name')}")
+            i += 1
         else:
             sanitized.append(msg)
+            i += 1
     return sanitized
 
 
@@ -151,9 +176,12 @@ async def run(session_id: str, user_message: str) -> AsyncGenerator[str, None]:
                 yield _sse({"type": "final", "content": final_content})
                 return
 
-        # Max iterations hit
+        # Max iterations hit — save only the clean portion (no dangling tool calls)
+        session_store.save_history(session_id, _sanitize_history(history))
         yield _sse({"type": "final", "content": "I've completed my research. How else can I help you?"})
 
     except Exception as e:
         logger.error(f"Agent error: {e}", exc_info=True)
+        # Save cleaned history so the next turn starts from a consistent state
+        session_store.save_history(session_id, _sanitize_history(history))
         yield _sse({"type": "error", "message": f"Something went wrong: {str(e)}"})

@@ -1,6 +1,6 @@
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Body, HTTPException, Header
+from fastapi import FastAPI, Body, HTTPException, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -9,6 +9,7 @@ from backend.mcp import call_tool, get_available_tools
 from backend.auth import (
     hash_password, verify_password, create_token,
     get_current_user, require_admin, require_doctor_or_admin,
+    generate_otp, verify_otp, send_otp_email,
 )
 from typing import Dict, Any, Optional
 import logging
@@ -177,6 +178,7 @@ def signup(payload: Dict[str, Any] = Body(...)):
         password  = payload.get("password") or ""
         role      = payload.get("role", "patient")
         linked_id = (payload.get("linked_id") or "").strip()
+        otp_code  = (payload.get("otp_code") or "").strip()
 
         if not username or not email or not password:
             raise HTTPException(400, "username, email and password are required")
@@ -184,6 +186,8 @@ def signup(payload: Dict[str, Any] = Body(...)):
             raise HTTPException(400, "role must be admin, doctor, or patient")
         if len(password) < 6:
             raise HTTPException(400, "Password must be at least 6 characters")
+        if otp_code and not verify_otp(email, otp_code):
+            raise HTTPException(400, "Invalid or expired verification code")
 
         existing = db.client.table("users").select("id").eq("username", username).execute()
         if existing.data:
@@ -210,6 +214,7 @@ def signup(payload: Dict[str, Any] = Body(...)):
             "user": {
                 "id": user["id"], "username": user["username"], "email": user["email"],
                 "role": user["role"], "linked_id": user.get("linked_id"),
+                "photo_url": user.get("photo_url"),
             },
         }
     except HTTPException:
@@ -250,6 +255,7 @@ def login(payload: Dict[str, Any] = Body(...)):
             "user": {
                 "id": user["id"], "username": user["username"], "email": user["email"],
                 "role": user["role"], "linked_id": user.get("linked_id"),
+                "photo_url": user.get("photo_url"),
             },
         }
     except HTTPException:
@@ -268,7 +274,7 @@ def get_me(authorization: Optional[str] = Header(None)):
     try:
         user_payload = get_current_user(authorization)
         db = get_db()
-        res = db.client.table("users").select("id,username,email,role,linked_id,created_at").eq("id", user_payload["sub"]).execute()
+        res = db.client.table("users").select("id,username,email,role,linked_id,photo_url,created_at").eq("id", user_payload["sub"]).execute()
         if not res.data:
             raise HTTPException(404, "User not found")
         return {"user": res.data[0]}
@@ -287,6 +293,127 @@ def list_doctors_for_signup():
     db = get_db()
     res = db.client.table("doctors").select("id,name,specialty").order("name").execute()
     return {"doctors": res.data or []}
+
+
+@app.post("/api/auth/send-otp")
+def send_otp_endpoint(payload: Dict[str, Any] = Body(...)):
+    """Generate a 6-digit OTP and send it to the given email."""
+    from backend.database import get_db
+    email = (payload.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "Valid email required")
+    try:
+        db = get_db()
+        existing = db.client.table("users").select("id").eq("email", email).execute()
+        if existing.data:
+            raise HTTPException(409, "Email already registered")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    resend_configured = bool(os.getenv("RESEND_API_KEY"))
+    smtp_configured   = bool(os.getenv("SMTP_HOST"))
+    logger.info(f"OTP request — RESEND_API_KEY={'SET' if resend_configured else 'MISSING'}, SMTP_HOST={'SET' if smtp_configured else 'MISSING'}")
+    code = generate_otp(email)
+    email_sent = send_otp_email(email, code)
+    logger.info(f"OTP for {email}: {code} (email_sent={email_sent})")
+
+    return {
+        "status": "ok",
+        "email_sent": email_sent,
+        # Show code in UI when no email provider is configured (development convenience)
+        "dev_hint": f"No email provider configured — your OTP is: {code}" if not email_sent else None,
+    }
+
+
+@app.post("/api/auth/upload-photo")
+async def upload_photo(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+):
+    """Upload a profile photo to Supabase Storage and save the URL to the user record."""
+    user = get_current_user(authorization)
+    user_id = user["sub"]
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Photo too large — max 5 MB")
+
+    content_type = file.content_type or "image/jpeg"
+    ext = "jpg" if "jpeg" in content_type.lower() else content_type.split("/")[-1][:10]
+    filename = f"avatars/{user_id}.{ext}"
+
+    import time
+    from backend.database import get_db
+    db = get_db()
+    try:
+        # Try to create the bucket; ignore "already exists" errors
+        try:
+            db.client.storage.create_bucket("user-photos", options={"public": True})
+            logger.info("Created storage bucket user-photos")
+        except Exception as be:
+            err_str = str(be).lower()
+            if "already exists" in err_str or "duplicate" in err_str or "409" in err_str or "already" in err_str:
+                logger.info("Bucket user-photos already exists — OK")
+            else:
+                # Real error — bucket might not be accessible
+                logger.warning(f"Bucket create warning (will attempt upload anyway): {be}")
+
+        # Verify the bucket is actually reachable before uploading
+        try:
+            db.client.storage.get_bucket("user-photos")
+            logger.info("Bucket user-photos confirmed accessible")
+        except Exception as ge:
+            logger.error(f"Bucket not accessible: {ge}")
+            raise HTTPException(
+                503,
+                "Storage bucket 'user-photos' not found. "
+                "Go to Supabase dashboard → Storage → New bucket → name: user-photos, toggle Public ON → Save."
+            )
+
+        # Remove stale copy so upload never hits a duplicate-key conflict
+        try:
+            db.client.storage.from_("user-photos").remove([filename])
+        except Exception:
+            pass
+
+        logger.info(f"Uploading {filename} ({len(content)} bytes, {content_type})")
+        # No upsert flag — we already removed the file above, so this is always a clean insert.
+        # Passing upsert=True (Python bool) causes httpx to reject the x-upsert header (must be str).
+        upload_resp = db.client.storage.from_("user-photos").upload(
+            path=filename,
+            file=content,
+            file_options={"content-type": content_type},
+        )
+        logger.info(f"Upload response: {upload_resp}")
+
+        result = db.client.storage.from_("user-photos").get_public_url(filename)
+        photo_url = result if isinstance(result, str) else getattr(result, "publicUrl", str(result))
+        # Strip any query params supabase appends and add our own cache-buster
+        photo_url = photo_url.split("?")[0] + f"?t={int(time.time())}"
+        logger.info(f"Photo public URL: {photo_url}")
+
+        # Save URL to the users table
+        try:
+            db.client.table("users").update({"photo_url": photo_url}).eq("id", user_id).execute()
+            logger.info(f"Saved photo_url to user {user_id}")
+        except Exception as col_err:
+            logger.error(f"DB update error: {col_err}")
+            if "photo_url" in str(col_err).lower() or "column" in str(col_err).lower():
+                raise HTTPException(
+                    503,
+                    "photo_url column missing. Run in Supabase SQL Editor: "
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT;"
+                )
+            raise
+
+        return {"status": "ok", "photo_url": photo_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Photo upload error: {e}", exc_info=True)
+        raise HTTPException(500, f"Upload failed: {e}")
 
 
 # ── Doctor dashboard endpoints ────────────────────────────────────────────────
@@ -364,10 +491,13 @@ def update_treatment_status(
     if new_status == "no_show":
         from backend.workflows.engine import trigger_workflow
         trigger_workflow("patient_no_show", {
-            "patient_id":    appt.get("patient_id", ""),
-            "doctor_id":     appt.get("doctor_id", ""),
-            "specialty":     appt.get("specialty", ""),
+            "patient_id":          appt.get("patient_id", ""),
+            "doctor_id":           appt.get("doctor_id", ""),
+            "specialty":           appt.get("specialty", ""),
+            "date":                appt.get("appointment_date", ""),
+            "time":                appt.get("appointment_time", ""),
             "confirmation_number": confirmation_number,
+            "reason":              appt.get("reason", ""),
         })
 
     return {"status": "updated", "confirmation_number": confirmation_number, "treatment_status": new_status}

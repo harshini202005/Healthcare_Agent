@@ -429,20 +429,54 @@ input, select, textarea { font-family: inherit; font-size: 1em; }
 
     <!-- Signup -->
     <div id="signup-form" style="display:none">
-      <div class="field"><label>Username</label><input id="s-user" type="text" placeholder="Choose a username" autocomplete="username"/></div>
-      <div class="field"><label>Email</label><input id="s-email" type="email" placeholder="your@email.com"/></div>
-      <div class="field"><label>Password</label><input id="s-pass" type="password" placeholder="Min. 6 characters" autocomplete="new-password"/></div>
-      <div class="field">
-        <label>Role</label>
-        <select id="s-role" onchange="onRoleChange()">
-          <option value="patient">Patient</option>
-          <option value="doctor">Doctor</option>
-          <option value="admin">Admin</option>
-        </select>
+
+      <!-- Photo picker -->
+      <div style="text-align:center;margin-bottom:16px">
+        <div id="s-photo-circle" onclick="triggerPhotoInput()" style="width:72px;height:72px;border-radius:50%;background:#f0f2ff;border:2px dashed var(--purple);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative">
+          <span id="s-photo-icon" style="font-size:1.6em">📷</span>
+          <img id="s-photo-preview" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover">
+        </div>
+        <div style="font-size:.78em;color:var(--gray);margin-bottom:6px">Profile photo <span style="font-weight:400;color:#adb5bd">(optional)</span></div>
+        <div style="display:flex;gap:6px;justify-content:center">
+          <button type="button" class="btn btn-outline" style="padding:4px 11px;font-size:.76em" onclick="triggerPhotoInput('camera')">📷 Camera</button>
+          <button type="button" class="btn btn-outline" style="padding:4px 11px;font-size:.76em" onclick="triggerPhotoInput('gallery')">🖼️ Upload</button>
+        </div>
+        <input type="file" id="s-photo-input" accept="image/*" style="display:none" onchange="onPhotoSelected(this)">
       </div>
-      <div class="field" id="s-patient-row" style="display:none"><label>Your Patient ID <span class="opt">(e.g. PAT001)</span></label><input id="s-linked" type="text" placeholder="e.g. PAT001"/></div>
-      <div class="field" id="s-doctor-row" style="display:none"><label>Link to Doctor Profile</label><select id="s-doctor"><option value="">Loading…</option></select></div>
-      <button class="btn btn-primary" style="width:100%;padding:11px;" id="signup-btn" onclick="doSignup()">Create Account</button>
+
+      <!-- Step 1: account details -->
+      <div id="signup-step-1">
+        <div class="field"><label>Username</label><input id="s-user" type="text" placeholder="Choose a username" autocomplete="username"/></div>
+        <div class="field"><label>Email</label><input id="s-email" type="email" placeholder="your@email.com"/></div>
+        <div class="field"><label>Password</label><input id="s-pass" type="password" placeholder="Min. 6 characters" autocomplete="new-password"/></div>
+        <div class="field">
+          <label>Role</label>
+          <select id="s-role" onchange="onRoleChange()">
+            <option value="patient">Patient</option>
+            <option value="doctor">Doctor</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="field" id="s-patient-row" style="display:none"><label>Your Patient ID <span class="opt">(e.g. PAT001)</span></label><input id="s-linked" type="text" placeholder="e.g. PAT001"/></div>
+        <div class="field" id="s-doctor-row" style="display:none"><label>Link to Doctor Profile</label><select id="s-doctor"><option value="">Loading…</option></select></div>
+        <button class="btn btn-primary" style="width:100%;padding:11px;" id="send-otp-btn" onclick="doSendOtp()">Send Verification Code →</button>
+      </div>
+
+      <!-- Step 2: OTP entry -->
+      <div id="signup-step-2" style="display:none">
+        <div style="background:#f3f0ff;border-radius:8px;padding:11px 14px;margin-bottom:14px;text-align:center">
+          <div id="otp-status-line" style="font-size:.85em;color:#5b21b6;font-weight:600"></div>
+          <div id="otp-dev-hint" style="display:none;margin-top:5px;font-size:.88em;background:#fff3e0;color:#e65100;border-radius:6px;padding:6px 10px;font-weight:700;letter-spacing:.5px"></div>
+        </div>
+        <div class="field"><label>Verification Code <span style="color:var(--red)">*</span></label><input id="s-otp" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"/></div>
+        <button class="btn btn-primary" style="width:100%;padding:11px;" id="signup-btn" onclick="doSignup()">Create Account</button>
+        <div style="text-align:center;margin-top:10px;font-size:.82em">
+          <button type="button" style="background:none;border:none;color:var(--purple);cursor:pointer;text-decoration:underline" onclick="doSendOtp(true)">Resend code</button>
+          &nbsp;·&nbsp;
+          <button type="button" style="background:none;border:none;color:var(--gray);cursor:pointer;text-decoration:underline" onclick="backToSignupStep1()">Back</button>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -450,9 +484,12 @@ input, select, textarea { font-family: inherit; font-size: 1em; }
 <!-- ══ MAIN APP ══ -->
 <div id="app">
   <header class="header">
-    <div>
-      <h1>🏥 Healthcare</h1>
-      <p id="header-sub">AI-Powered Health Management</p>
+    <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
+      <img id="user-avatar" src="" alt="" style="display:none;width:42px;height:42px;border-radius:50%;object-fit:cover;border:2.5px solid rgba(255,255,255,.7);flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.18)">
+      <div style="min-width:0">
+        <h1>🏥 Healthcare</h1>
+        <p id="header-sub">AI-Powered Health Management</p>
+      </div>
     </div>
     <div class="header-right">
       <button class="bell-btn" onclick="switchTab('notifications')" title="Notifications">
@@ -662,6 +699,25 @@ input, select, textarea { font-family: inherit; font-size: 1em; }
   </div>
 </div>
 
+<!-- ══ CAMERA MODAL ══ -->
+<div class="modal-overlay" id="camera-modal" style="z-index:9500">
+  <div class="modal-card" style="max-width:400px">
+    <div class="modal-header">
+      <h2>📷 Take Photo</h2>
+      <button class="modal-close" onclick="closeCamera()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:12px;text-align:center">
+      <video id="camera-video" autoplay playsinline muted style="width:100%;border-radius:10px;background:#111;max-height:300px;object-fit:cover;display:block"></video>
+      <canvas id="camera-canvas" style="display:none"></canvas>
+      <div id="camera-error" style="display:none;padding:16px;color:var(--red);font-size:.88em"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeCamera()">Cancel</button>
+      <button class="btn btn-primary" id="capture-btn" onclick="capturePhoto()">📷 Capture</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ NOTIFICATION DETAIL MODAL ══ -->
 <div class="modal-overlay" id="notif-detail-modal">
   <div class="modal-card">
@@ -684,6 +740,7 @@ let _user = null, _token = null;
 let _allergyList = [], _wfCache = {}, _notifCache = {};
 let _notifId = '', _notifTimer = null;
 let _thinkIds = [], _processing = false;
+let _signupPhotoFile = null;
 
 // ── Auth storage ───────────────────────────────────────────────────────────
 const authH = () => _token ? {'Content-Type':'application/json','Authorization':`Bearer ${_token}`} : {'Content-Type':'application/json'};
@@ -713,7 +770,10 @@ function showToast(msg, type='success') {
 // ── Modal helpers ──────────────────────────────────────────────────────────
 function closeModal(id) { $(id).classList.remove('open'); }
 document.addEventListener('click', e => {
-  if (e.target.classList.contains('modal-overlay')) closeModal(e.target.id);
+  if (e.target.classList.contains('modal-overlay')) {
+    if (e.target.id === 'camera-modal') closeCamera();
+    else closeModal(e.target.id);
+  }
 });
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -773,28 +833,166 @@ async function doLogin() {
   finally { btn.disabled = false; btn.textContent = 'Sign In'; }
 }
 
+// ── Photo picker ───────────────────────────────────────────────────────────
+let _cameraStream = null;
+
+function triggerPhotoInput(source) {
+  if (source === 'camera') { openCamera(); return; }
+  const inp = $('s-photo-input');
+  inp.removeAttribute('capture');
+  inp.click();
+}
+
+function _setPhotoPreview(file) {
+  _signupPhotoFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const prev = $('s-photo-preview'), icon = $('s-photo-icon');
+    prev.src = e.target.result; prev.style.display = 'block'; icon.style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function onPhotoSelected(inp) {
+  if (!inp.files || !inp.files[0]) return;
+  _setPhotoPreview(inp.files[0]);
+}
+
+// ── Camera via getUserMedia ────────────────────────────────────────────────
+async function openCamera() {
+  $('camera-error').style.display = 'none';
+  $('camera-video').style.display = 'block';
+  $('capture-btn').disabled = false;
+  document.getElementById('camera-modal').classList.add('open');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+    _cameraStream = stream;
+    $('camera-video').srcObject = stream;
+  } catch(e) {
+    $('camera-video').style.display = 'none';
+    $('capture-btn').disabled = true;
+    $('camera-error').textContent = `Camera unavailable: ${e.message}. Use the Upload button instead.`;
+    $('camera-error').style.display = 'block';
+  }
+}
+
+function closeCamera() {
+  if (_cameraStream) { _cameraStream.getTracks().forEach(t => t.stop()); _cameraStream = null; }
+  const v = $('camera-video'); if (v) v.srcObject = null;
+  document.getElementById('camera-modal').classList.remove('open');
+}
+
+function capturePhoto() {
+  const video = $('camera-video'), canvas = $('camera-canvas');
+  if (!video.videoWidth || !video.videoHeight || video.readyState < 2) {
+    showToast('Camera not ready yet — wait a moment', 'warning'); return;
+  }
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.toBlob(blob => {
+    if (!blob) { showToast('Capture failed, try again', 'error'); return; }
+    const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+    _setPhotoPreview(file);
+    closeCamera();
+  }, 'image/jpeg', 0.92);
+}
+
+// ── Signup — step 1: send OTP ──────────────────────────────────────────────
+async function doSendOtp(resend = false) {
+  const email = $('s-email').value.trim();
+  if (!email || !email.includes('@')) { showAuthErr('Please enter a valid email address first.'); return; }
+  const btn = $('send-otp-btn'); btn.disabled = true; btn.textContent = 'Sending…';
+  $('auth-error').classList.remove('show');
+  try {
+    const res = await fetch(`${API}/api/auth/send-otp`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email}),
+    });
+    const d = await res.json();
+    if (!res.ok) { showAuthErr(d.detail || 'Could not send code.'); return; }
+    $('signup-step-1').style.display = 'none';
+    $('signup-step-2').style.display = '';
+    const hint = $('otp-dev-hint');
+    if (d.email_sent) {
+      $('otp-status-line').textContent = `✉️ Code sent to ${email}`;
+      hint.style.display = 'none';
+    } else {
+      $('otp-status-line').textContent = '⚠️ No email provider — use the code below:';
+      hint.textContent = d.dev_hint || '';
+      hint.style.display = '';
+    }
+    if (resend) showToast('Code resent!', 'success');
+  } catch(e) { showAuthErr('Network error: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Send Verification Code →'; }
+}
+
+function backToSignupStep1() {
+  $('signup-step-1').style.display = '';
+  $('signup-step-2').style.display = 'none';
+  $('auth-error').classList.remove('show');
+}
+
+// ── Signup — step 2: verify OTP + create account ───────────────────────────
 async function doSignup() {
   const btn = $('signup-btn'); btn.disabled = true; btn.textContent = 'Creating…';
   $('auth-error').classList.remove('show');
+  const otp_code = $('s-otp').value.trim();
+  if (!otp_code) { showAuthErr('Enter the verification code.'); btn.disabled = false; btn.textContent = 'Create Account'; return; }
   const role = $('s-role').value;
   const linked_id = role === 'patient' ? $('s-linked').value.trim() : role === 'doctor' ? $('s-doctor').value : '';
   try {
     const res = await fetch(`${API}/api/auth/signup`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({username: $('s-user').value.trim(), email: $('s-email').value.trim(), password: $('s-pass').value, role, linked_id}),
+      body: JSON.stringify({
+        username: $('s-user').value.trim(), email: $('s-email').value.trim(),
+        password: $('s-pass').value, role, linked_id, otp_code,
+      }),
     });
     const d = await res.json();
     if (!res.ok) { showAuthErr(d.detail || 'Signup failed'); return; }
-    saveAuth(d.token, d.user); enterApp();
+    saveAuth(d.token, d.user);
+
+    // Upload photo if one was selected
+    if (_signupPhotoFile) {
+      try {
+        const fd = new FormData(); fd.append('file', _signupPhotoFile);
+        const pr = await fetch(`${API}/api/auth/upload-photo`, {
+          method:'POST', headers:{'Authorization':`Bearer ${d.token}`}, body: fd,
+        });
+        const pd = await pr.json();
+        if (!pr.ok) {
+          showToast('Photo upload failed: ' + (pd.detail || pr.status), 'error');
+          console.error('Photo upload error:', pd);
+        } else if (pd.photo_url) {
+          saveAuth(d.token, {..._user, photo_url: pd.photo_url});
+        }
+      } catch(e) {
+        showToast('Photo upload error: ' + e.message, 'error');
+        console.error('Photo upload exception:', e);
+      }
+    }
+    _signupPhotoFile = null;
+    closeCamera(); // ensure camera stream is always stopped before entering app
+    enterApp();
   } catch(e) { showAuthErr('Network error: ' + e.message); }
   finally { btn.disabled = false; btn.textContent = 'Create Account'; }
 }
 
 function doLogout() {
   clearAuth(); stopNotifPoll(); _notifId = ''; _notifCache = {};
+  _signupPhotoFile = null;
+  if (_cameraStream) { _cameraStream.getTracks().forEach(t => t.stop()); _cameraStream = null; }
+  const avatar = $('user-avatar'); if (avatar) avatar.style.display = 'none';
   $('app').style.display = 'none';
   $('auth-overlay').style.display = 'flex';
   $('l-user').value = ''; $('l-pass').value = '';
+  // Reset signup form
+  const step1 = $('signup-step-1'), step2 = $('signup-step-2');
+  if (step1) step1.style.display = '';
+  if (step2) step2.style.display = 'none';
+  const prev = $('s-photo-preview'), icon = $('s-photo-icon');
+  if (prev) prev.style.display = 'none';
+  if (icon) icon.style.display = '';
 }
 
 function enterApp() {
@@ -805,6 +1003,12 @@ function enterApp() {
   $('user-pill').textContent = `${roleMap[u.role]}: ${u.username}`;
   $('header-sub').textContent = u.role === 'admin' ? 'Admin Dashboard' :
     u.role === 'doctor' ? `Dr. ${u.linked_id || u.username}` : `Welcome, ${u.username}`;
+  // Show avatar if user has a profile photo
+  const avatar = $('user-avatar');
+  if (avatar) {
+    if (u.photo_url) { avatar.src = u.photo_url; avatar.style.display = ''; }
+    else avatar.style.display = 'none';
+  }
   $('tb-doctor').style.display      = ['doctor','admin'].includes(u.role) ? '' : 'none';
   $('tb-workflows').style.display   = u.role === 'admin' ? '' : 'none';
   $('tb-admin-users').style.display = u.role === 'admin' ? '' : 'none';

@@ -160,14 +160,28 @@ def get_appointment(confirmation_number: str) -> dict:
 def cancel_appointment(confirmation_number: str, reason: Optional[str] = None) -> dict:
     db = get_db()
     try:
-        res = db.client.table("appointments").select("confirmation_number").eq(
+        res = db.client.table("appointments").select("*").eq(
             "confirmation_number", confirmation_number).single().execute()
         if not res.data:
             return {"error": True, "message": f"Appointment not found: {confirmation_number}"}
+        appt = res.data
         db.client.table("appointments").update(
             {"status": "cancelled", "notes": reason or "Cancelled by patient"}
         ).eq("confirmation_number", confirmation_number).execute()
         logger.info(f"Appointment cancelled: {confirmation_number}")
+        try:
+            from backend.workflows.engine import trigger_workflow
+            trigger_workflow("appointment_cancelled", {
+                "patient_id":          appt.get("patient_id", ""),
+                "doctor_id":           appt.get("doctor_id", ""),
+                "specialty":           appt.get("specialty", ""),
+                "date":                appt.get("appointment_date", ""),
+                "time":                appt.get("appointment_time", ""),
+                "confirmation_number": confirmation_number,
+                "reason":              reason or "",
+            })
+        except Exception:
+            pass
         return {"message": "Appointment cancelled.", "confirmation_number": confirmation_number}
     except Exception as e:
         return {"error": True, "message": f"Failed to cancel: {e}"}
